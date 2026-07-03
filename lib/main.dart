@@ -75,6 +75,10 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
   List<TrackPoint> trackPoints = [];
   List<MemoPoint> memoPoints = [];
 
+  List<TrackPoint> mapTrackPoints = [];
+  List<MemoPoint> mapMemoPoints = [];
+   int mapUpdateCount = 0;
+
   final TextEditingController memoController = TextEditingController();
 
   double roundTo6(double value) {
@@ -164,6 +168,9 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
       statusText = '記録を開始しました';
       trackPoints.clear();
       memoPoints.clear();
+      memoPoints.clear();
+      mapTrackPoints.clear();
+      mapMemoPoints.clear();
       geoJsonText = '';
       testCount = 0;
       latitudeText = '未取得';
@@ -226,6 +233,16 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
       statusText = 'メモ地点を記録しました';
     });
   }
+ 
+  void updateMapPreview() {
+  setState(() {
+    mapTrackPoints = List.from(trackPoints);
+    mapMemoPoints = List.from(memoPoints);
+    mapUpdateCount++;
+
+    statusText = '地図プレビューを更新しました';
+  });
+}
 
   void createGeoJson() {
     if (trackPoints.length < 2) {
@@ -541,17 +558,64 @@ const Text(
 
 const SizedBox(height: 8),
 
+ElevatedButton(
+  onPressed: updateMapPreview,
+  child: const Text('地図更新'),
+),
+
+const SizedBox(height: 8),
+
 SizedBox(
   height: 300,
   child: FlutterMap(
-    options: const MapOptions(
-      initialCenter: LatLng(35.690921, 139.700258),
+    key: ValueKey(mapUpdateCount),
+    options: MapOptions(
+      initialCenter: mapTrackPoints.isNotEmpty
+          ? LatLng(
+              mapTrackPoints.last.latitude,
+              mapTrackPoints.last.longitude,
+            )
+          : const LatLng(35.690921, 139.700258),
       initialZoom: 16,
     ),
     children: [
       TileLayer(
         urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
         userAgentPackageName: 'com.example.machiaruki_app',
+      ),
+
+      if (mapTrackPoints.length >= 2)
+        PolylineLayer(
+          polylines: [
+            Polyline(
+              points: mapTrackPoints.map((point) {
+                return LatLng(
+                  point.latitude,
+                  point.longitude,
+                );
+              }).toList(),
+              strokeWidth: 4,
+              color: Colors.blue,
+            ),
+          ],
+        ),
+
+      MarkerLayer(
+        markers: mapMemoPoints.map((memoPoint) {
+          return Marker(
+            point: LatLng(
+              memoPoint.latitude,
+              memoPoint.longitude,
+            ),
+            width: 40,
+            height: 40,
+            child: const Icon(
+              Icons.location_pin,
+              size: 36,
+              color: Colors.red,
+            ),
+          );
+        }).toList(),
       ),
     ],
   ),
