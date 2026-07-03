@@ -398,40 +398,42 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
                     child: const Text('ルート記録作成'),
                   ),
 
-                  const SizedBox(height: 24),
+                  if (geoJsonText.isNotEmpty) ...[
+  const SizedBox(height: 24),
 
-                  const Text(
-                    '保存方法',
-                    style: TextStyle(fontSize: 16),
-                  ),
+  const Text(
+    '保存方法',
+    style: TextStyle(fontSize: 16),
+  ),
 
-                  const SizedBox(height: 8),
+  const SizedBox(height: 8),
 
-                  SegmentedButton<String>(
-                    segments: const [
-                      ButtonSegment<String>(
-                        value: 'download',
-                        label: Text('DL保存'),
-                      ),
-                      ButtonSegment<String>(
-                        value: 'googleDrive',
-                        label: Text('Drive送信'),
-                      ),
-                    ],
-                    selected: {saveMethod},
-                    onSelectionChanged: (Set<String> selected) {
-                      setState(() {
-                        saveMethod = selected.first;
-                      });
-                    },
-                  ),
+  SegmentedButton<String>(
+    segments: const [
+      ButtonSegment<String>(
+        value: 'download',
+        label: Text('端末保存'),
+      ),
+      ButtonSegment<String>(
+        value: 'googleDrive',
+        label: Text('Drive送信'),
+      ),
+    ],
+    selected: {saveMethod},
+    onSelectionChanged: (Set<String> selected) {
+      setState(() {
+        saveMethod = selected.first;
+      });
+    },
+  ),
 
-                  const SizedBox(height: 12),
+  const SizedBox(height: 12),
 
-                  ElevatedButton(
-                    onPressed: isRecording ? null : saveRouteRecord,
-                    child: const Text('ルート記録保存'),
-                  ),
+  ElevatedButton(
+    onPressed: isRecording ? null : saveRouteRecord,
+    child: const Text('ルート記録保存'),
+  ),
+],
 
                   const SizedBox(height: 32),
 
