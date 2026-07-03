@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
@@ -32,6 +33,7 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
   String statusText = '記録を開始してください';
   String latitudeText = '未取得';
   String longitudeText = '未取得';
+  String geoJsonText = '';
 
   bool isRecording = false;
   int testCount = 0;
@@ -72,8 +74,6 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
         isTestData: false,
       );
     } catch (e) {
-      // PCでGPSが取れないとき用のテスト座標
-      // 新宿駅付近から少しずつ動くようにしている
       testCount++;
 
       return TrackPoint(
@@ -90,15 +90,12 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
 
     setState(() {
       trackPoints.add(point);
-
       latitudeText = point.latitude.toString();
       longitudeText = point.longitude.toString();
 
-      if (point.isTestData) {
-        statusText = '記録中：テスト座標を追加しました';
-      } else {
-        statusText = '記録中：現在地を追加しました';
-      }
+      statusText = point.isTestData
+          ? '記録中：テスト座標を追加しました'
+          : '記録中：現在地を追加しました';
     });
   }
 
@@ -107,6 +104,7 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
       isRecording = true;
       statusText = '記録を開始しました';
       trackPoints.clear();
+      geoJsonText = '';
       testCount = 0;
       latitudeText = '未取得';
       longitudeText = '未取得';
@@ -131,6 +129,46 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
     });
   }
 
+  void createGeoJson() {
+    if (trackPoints.length < 2) {
+      setState(() {
+        geoJsonText = 'GeoJSONを作るには2点以上の記録が必要です';
+      });
+      return;
+    }
+
+    final coordinates = trackPoints.map((point) {
+      return [
+        point.longitude,
+        point.latitude,
+      ];
+    }).toList();
+
+    final geoJson = {
+      "type": "FeatureCollection",
+      "features": [
+        {
+          "type": "Feature",
+          "geometry": {
+            "type": "LineString",
+            "coordinates": coordinates,
+          },
+          "properties": {
+            "name": "walking route",
+            "point_count": trackPoints.length,
+            "created_at": DateTime.now().toIso8601String(),
+            "is_test_data": trackPoints.any((point) => point.isTestData),
+          }
+        }
+      ]
+    };
+
+    setState(() {
+      geoJsonText = const JsonEncoder.withIndent('  ').convert(geoJson);
+      statusText = 'GeoJSONを作成しました';
+    });
+  }
+
   @override
   void dispose() {
     timer?.cancel();
@@ -145,61 +183,90 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
         appBar: AppBar(
           title: const Text('まち歩きアプリ'),
         ),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  statusText,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 18),
-                ),
-                const SizedBox(height: 24),
-
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    ElevatedButton(
-                      onPressed: isRecording ? null : startRecording,
-                      child: const Text('記録開始'),
-                    ),
-                    const SizedBox(width: 16),
-                    ElevatedButton(
-                      onPressed: isRecording ? stopRecording : null,
-                      child: const Text('記録停止'),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 32),
-
-                Text(
-                  '記録点数：${trackPoints.length}',
-                  style: const TextStyle(fontSize: 22),
-                ),
-                const SizedBox(height: 16),
-
-                Text(
-                  '緯度：$latitudeText',
-                  style: const TextStyle(fontSize: 20),
-                ),
-                Text(
-                  '経度：$longitudeText',
-                  style: const TextStyle(fontSize: 20),
-                ),
-
-                const SizedBox(height: 24),
-
-                if (trackPoints.isNotEmpty)
+        body: SingleChildScrollView(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(height: 160),
                   Text(
-                    trackPoints.last.isTestData
-                        ? '現在はテスト座標で記録しています'
-                        : '本物のGPS座標で記録しています',
-                    style: const TextStyle(fontSize: 16),
+                    statusText,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 18),
                   ),
-              ],
+                  const SizedBox(height: 24),
+
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      ElevatedButton(
+                        onPressed: isRecording ? null : startRecording,
+                        child: const Text('記録開始'),
+                      ),
+                      const SizedBox(width: 16),
+                      ElevatedButton(
+                        onPressed: isRecording ? stopRecording : null,
+                        child: const Text('記録停止'),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  ElevatedButton(
+                    onPressed: isRecording ? null : createGeoJson,
+                    child: const Text('GeoJSON作成'),
+                  ),
+
+                  const SizedBox(height: 32),
+
+                  Text(
+                    '記録点数：${trackPoints.length}',
+                    style: const TextStyle(fontSize: 22),
+                  ),
+                  const SizedBox(height: 16),
+
+                  Text(
+                    '緯度：$latitudeText',
+                    style: const TextStyle(fontSize: 20),
+                  ),
+                  Text(
+                    '経度：$longitudeText',
+                    style: const TextStyle(fontSize: 20),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  if (trackPoints.isNotEmpty)
+                    Text(
+                      trackPoints.last.isTestData
+                          ? '現在はテスト座標で記録しています'
+                          : '本物のGPS座標で記録しています',
+                      style: const TextStyle(fontSize: 16),
+                    ),
+
+                  const SizedBox(height: 24),
+
+                  if (geoJsonText.isNotEmpty)
+                    Container(
+                      width: double.infinity,
+                      height: 220,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: SingleChildScrollView(
+                        child: SelectableText(
+                          geoJsonText,
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         ),
