@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html;
 
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
@@ -34,6 +36,7 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
   String latitudeText = '未取得';
   String longitudeText = '未取得';
   String geoJsonText = '';
+  String recorderName = '';
 
   bool isRecording = false;
   int testCount = 0;
@@ -129,6 +132,10 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
     });
   }
 
+  double roundTo6(double value) {
+  return double.parse(value.toStringAsFixed(6));
+  }
+
   void createGeoJson() {
     if (trackPoints.length < 2) {
       setState(() {
@@ -139,8 +146,9 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
 
     final coordinates = trackPoints.map((point) {
       return [
-        point.longitude,
-        point.latitude,
+        roundTo6(point.longitude),
+        roundTo6(point.latitude),
+
       ];
     }).toList();
 
@@ -155,6 +163,7 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
           },
           "properties": {
             "name": "walking route",
+            "recorder_name": recorderName.isEmpty ? "unknown" : recorderName,
             "point_count": trackPoints.length,
             "created_at": DateTime.now().toIso8601String(),
             "is_test_data": trackPoints.any((point) => point.isTestData),
@@ -168,6 +177,45 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
       statusText = 'GeoJSONを作成しました';
     });
   }
+
+  void downloadGeoJson() {
+  if (geoJsonText.isEmpty) {
+    setState(() {
+      statusText = '先にGeoJSONを作成してください';
+    });
+    return;
+  }
+
+  final now = DateTime.now();
+  
+  final safeRecorderName = recorderName  
+    .trim()
+    .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+
+  final namePart = safeRecorderName.isEmpty ? 'unknown' : safeRecorderName;
+
+  
+  final fileName =
+    'route_${namePart}_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}.geojson';
+  
+  final bytes = utf8.encode(geoJsonText);
+  final blob = html.Blob(
+    [bytes],
+    'application/geo+json',
+  );
+
+  final url = html.Url.createObjectUrlFromBlob(blob);
+
+  html.AnchorElement(href: url)
+    ..setAttribute('download', fileName)
+    ..click();
+
+  html.Url.revokeObjectUrl(url);
+
+  setState(() {
+    statusText = 'GeoJSONファイルをダウンロードしました';
+  });
+}
 
   @override
   void dispose() {
@@ -197,6 +245,16 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
                     style: const TextStyle(fontSize: 18),
                   ),
                   const SizedBox(height: 24),
+                  TextField(
+                    decoration: const InputDecoration(
+                    labelText: '記録者名',
+                    border: OutlineInputBorder(),
+                   ),
+                   onChanged: (value) {
+                     recorderName = value;
+                   },
+                  ),
+                  const SizedBox(height: 24),
 
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -221,6 +279,11 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
                   ),
 
                   const SizedBox(height: 32),
+
+                  ElevatedButton(
+                   onPressed: isRecording ? null : downloadGeoJson,
+                   child: const Text('GeoJSONダウンロード'),
+                  ),
 
                   Text(
                     '記録点数：${trackPoints.length}',
