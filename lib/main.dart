@@ -601,22 +601,46 @@ SizedBox(
         ),
 
       MarkerLayer(
-        markers: mapMemoPoints.map((memoPoint) {
-          return Marker(
-            point: LatLng(
-              memoPoint.latitude,
-              memoPoint.longitude,
-            ),
-            width: 40,
-            height: 40,
-            child: const Icon(
-              Icons.location_pin,
-              size: 36,
-              color: Colors.red,
-            ),
-          );
-        }).toList(),
+  markers: mapMemoPoints.map((memoPoint) {
+    return Marker(
+      point: LatLng(
+        memoPoint.latitude,
+        memoPoint.longitude,
       ),
+      width: 72,
+      height: 72,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          showDialog(
+            context: context,
+            builder: (BuildContext dialogContext) {
+              return AlertDialog(
+                title: const Text('メモ'),
+                content: Text(memoPoint.memo),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      Navigator.of(dialogContext).pop();
+                    },
+                    child: const Text('閉じる'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+        child: const Center(
+          child: Icon(
+            Icons.location_pin,
+            size: 48,
+            color: Colors.red,
+          ),
+        ),
+      ),
+    );
+  }).toList(),
+),
     ],
   ),
 ),
