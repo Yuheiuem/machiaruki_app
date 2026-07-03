@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+
 // ignore: avoid_web_libraries_in_flutter
 import 'dart:html' as html;
 
@@ -31,6 +32,22 @@ class TrackPoint {
   });
 }
 
+class MemoPoint {
+  final DateTime time;
+  final double latitude;
+  final double longitude;
+  final String memo;
+  final bool isTestData;
+
+  MemoPoint({
+    required this.time,
+    required this.latitude,
+    required this.longitude,
+    required this.memo,
+    required this.isTestData,
+  });
+}
+
 class _MachiarukiAppState extends State<MachiarukiApp> {
   String statusText = '記録を開始してください';
   String latitudeText = '未取得';
@@ -43,6 +60,13 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
 
   Timer? timer;
   List<TrackPoint> trackPoints = [];
+  List<MemoPoint> memoPoints = [];
+
+  final TextEditingController memoController = TextEditingController();
+
+  double roundTo6(double value) {
+    return double.parse(value.toStringAsFixed(6));
+  }
 
   Future<TrackPoint> getCurrentTrackPoint() async {
     try {
@@ -93,8 +117,8 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
 
     setState(() {
       trackPoints.add(point);
-      latitudeText = point.latitude.toString();
-      longitudeText = point.longitude.toString();
+      latitudeText = roundTo6(point.latitude).toString();
+      longitudeText = roundTo6(point.longitude).toString();
 
       statusText = point.isTestData
           ? '記録中：テスト座標を追加しました'
@@ -107,6 +131,7 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
       isRecording = true;
       statusText = '記録を開始しました';
       trackPoints.clear();
+      memoPoints.clear();
       geoJsonText = '';
       testCount = 0;
       latitudeText = '未取得';
@@ -132,8 +157,35 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
     });
   }
 
-  double roundTo6(double value) {
-  return double.parse(value.toStringAsFixed(6));
+  Future<void> addMemoPoint() async {
+    final memoText = memoController.text.trim();
+
+    if (memoText.isEmpty) {
+      setState(() {
+        statusText = 'メモを入力してください';
+      });
+      return;
+    }
+
+    TrackPoint point = await getCurrentTrackPoint();
+
+    setState(() {
+      memoPoints.add(
+        MemoPoint(
+          time: DateTime.now(),
+          latitude: point.latitude,
+          longitude: point.longitude,
+          memo: memoText,
+          isTestData: point.isTestData,
+        ),
+      );
+
+      latitudeText = roundTo6(point.latitude).toString();
+      longitudeText = roundTo6(point.longitude).toString();
+
+      memoController.clear();
+      statusText = 'メモ地点を記録しました';
+    });
   }
 
   void createGeoJson() {
@@ -144,31 +196,54 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
       return;
     }
 
-    final coordinates = trackPoints.map((point) {
+    final routeCoordinates = trackPoints.map((point) {
       return [
         roundTo6(point.longitude),
         roundTo6(point.latitude),
-
       ];
+    }).toList();
+
+    final routeFeature = {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": routeCoordinates,
+      },
+      "properties": {
+        "feature_type": "route",
+        "name": "walking route",
+        "recorder_name": recorderName.isEmpty ? "unknown" : recorderName,
+        "point_count": trackPoints.length,
+        "created_at": DateTime.now().toIso8601String(),
+        "is_test_data": trackPoints.any((point) => point.isTestData),
+      }
+    };
+
+    final memoFeatures = memoPoints.map((memoPoint) {
+      return {
+        "type": "Feature",
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            roundTo6(memoPoint.longitude),
+            roundTo6(memoPoint.latitude),
+          ],
+        },
+        "properties": {
+          "feature_type": "memo",
+          "memo": memoPoint.memo,
+          "recorder_name": recorderName.isEmpty ? "unknown" : recorderName,
+          "recorded_at": memoPoint.time.toIso8601String(),
+          "is_test_data": memoPoint.isTestData,
+        }
+      };
     }).toList();
 
     final geoJson = {
       "type": "FeatureCollection",
       "features": [
-        {
-          "type": "Feature",
-          "geometry": {
-            "type": "LineString",
-            "coordinates": coordinates,
-          },
-          "properties": {
-            "name": "walking route",
-            "recorder_name": recorderName.isEmpty ? "unknown" : recorderName,
-            "point_count": trackPoints.length,
-            "created_at": DateTime.now().toIso8601String(),
-            "is_test_data": trackPoints.any((point) => point.isTestData),
-          }
-        }
+        routeFeature,
+        ...memoFeatures,
       ]
     };
 
@@ -179,47 +254,47 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
   }
 
   void downloadGeoJson() {
-  if (geoJsonText.isEmpty) {
+    if (geoJsonText.isEmpty) {
+      setState(() {
+        statusText = '先にGeoJSONを作成してください';
+      });
+      return;
+    }
+
+    final now = DateTime.now();
+
+    final safeRecorderName = recorderName
+        .trim()
+        .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+
+    final namePart = safeRecorderName.isEmpty ? 'unknown' : safeRecorderName;
+
+    final fileName =
+        'route_${namePart}_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}.geojson';
+
+    final bytes = utf8.encode(geoJsonText);
+    final blob = html.Blob(
+      [bytes],
+      'application/geo+json',
+    );
+
+    final url = html.Url.createObjectUrlFromBlob(blob);
+
+    html.AnchorElement(href: url)
+      ..setAttribute('download', fileName)
+      ..click();
+
+    html.Url.revokeObjectUrl(url);
+
     setState(() {
-      statusText = '先にGeoJSONを作成してください';
+      statusText = 'GeoJSONファイルをダウンロードしました';
     });
-    return;
   }
-
-  final now = DateTime.now();
-  
-  final safeRecorderName = recorderName  
-    .trim()
-    .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-
-  final namePart = safeRecorderName.isEmpty ? 'unknown' : safeRecorderName;
-
-  
-  final fileName =
-    'route_${namePart}_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}.geojson';
-  
-  final bytes = utf8.encode(geoJsonText);
-  final blob = html.Blob(
-    [bytes],
-    'application/geo+json',
-  );
-
-  final url = html.Url.createObjectUrlFromBlob(blob);
-
-  html.AnchorElement(href: url)
-    ..setAttribute('download', fileName)
-    ..click();
-
-  html.Url.revokeObjectUrl(url);
-
-  setState(() {
-    statusText = 'GeoJSONファイルをダウンロードしました';
-  });
-}
 
   @override
   void dispose() {
     timer?.cancel();
+    memoController.dispose();
     super.dispose();
   }
 
@@ -238,22 +313,26 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const SizedBox(height: 160),
+                  const SizedBox(height: 80),
+
                   Text(
                     statusText,
                     textAlign: TextAlign.center,
                     style: const TextStyle(fontSize: 18),
                   ),
+
                   const SizedBox(height: 24),
+
                   TextField(
                     decoration: const InputDecoration(
-                    labelText: '記録者名',
-                    border: OutlineInputBorder(),
-                   ),
-                   onChanged: (value) {
-                     recorderName = value;
-                   },
+                      labelText: '記録者名',
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (value) {
+                      recorderName = value;
+                    },
                   ),
+
                   const SizedBox(height: 24),
 
                   Row(
@@ -271,24 +350,53 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
                     ],
                   ),
 
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 24),
+
+                  TextField(
+                    controller: memoController,
+                    decoration: const InputDecoration(
+                      labelText: 'メモ',
+                      hintText: '例：歩道が狭い、休憩場所、見通しが悪い',
+                      border: OutlineInputBorder(),
+                    ),
+                    maxLines: 2,
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  ElevatedButton(
+                    onPressed: addMemoPoint,
+                    child: const Text('メモ記録'),
+                  ),
+
+                  const SizedBox(height: 24),
 
                   ElevatedButton(
                     onPressed: isRecording ? null : createGeoJson,
                     child: const Text('GeoJSON作成'),
                   ),
 
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 12),
 
                   ElevatedButton(
-                   onPressed: isRecording ? null : downloadGeoJson,
-                   child: const Text('GeoJSONダウンロード'),
+                    onPressed: isRecording ? null : downloadGeoJson,
+                    child: const Text('GeoJSONダウンロード'),
                   ),
+
+                  const SizedBox(height: 32),
 
                   Text(
                     '記録点数：${trackPoints.length}',
                     style: const TextStyle(fontSize: 22),
                   ),
+
+                  const SizedBox(height: 8),
+
+                  Text(
+                    'メモ件数：${memoPoints.length}',
+                    style: const TextStyle(fontSize: 22),
+                  ),
+
                   const SizedBox(height: 16),
 
                   Text(
