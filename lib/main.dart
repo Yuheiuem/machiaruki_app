@@ -57,9 +57,14 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
   String recorderName = '';
 
   // 保存方法
-  // download: 端末にダウンロード
+  // download: 端末保存
   // googleDrive: 将来Google Drive送信用
   String saveMethod = 'download';
+
+  // 動作モード
+  // test: PCテスト用。GPS失敗時にテスト座標を使う
+  // production: 実運用。GPS失敗時や精度不良時は記録しない
+  String operationMode = 'test';
 
   bool isRecording = false;
   int testCount = 0;
@@ -74,7 +79,7 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
     return double.parse(value.toStringAsFixed(6));
   }
 
-  Future<TrackPoint> getCurrentTrackPoint() async {
+  Future<TrackPoint?> getCurrentTrackPoint() async {
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
 
@@ -100,6 +105,11 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
         ),
       );
 
+      // 実運用では、accuracy が10mより悪い点は記録しない
+      if (operationMode == 'production' && position.accuracy > 10) {
+        return null;
+      }
+
       return TrackPoint(
         time: DateTime.now(),
         latitude: position.latitude,
@@ -107,21 +117,32 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
         isTestData: false,
       );
     } catch (e) {
-      // PCでGPSが使えない場合のテスト座標
-      // 新宿駅付近から少しずつ動く
-      testCount++;
+      // PCテスト用なら、GPS取得失敗時にテスト座標を返す
+      if (operationMode == 'test') {
+        testCount++;
 
-      return TrackPoint(
-        time: DateTime.now(),
-        latitude: 35.690921 + (testCount * 0.00005),
-        longitude: 139.700258 + (testCount * 0.00005),
-        isTestData: true,
-      );
+        return TrackPoint(
+          time: DateTime.now(),
+          latitude: 35.690921 + (testCount * 0.00005),
+          longitude: 139.700258 + (testCount * 0.00005),
+          isTestData: true,
+        );
+      }
+
+      // 実運用では、GPS取得失敗時は記録しない
+      return null;
     }
   }
 
   Future<void> addTrackPoint() async {
-    TrackPoint point = await getCurrentTrackPoint();
+    TrackPoint? point = await getCurrentTrackPoint();
+
+    if (point == null) {
+      setState(() {
+        statusText = '位置情報を取得できなかったため、この点は記録しませんでした';
+      });
+      return;
+    }
 
     setState(() {
       trackPoints.add(point);
@@ -176,7 +197,14 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
       return;
     }
 
-    TrackPoint point = await getCurrentTrackPoint();
+    TrackPoint? point = await getCurrentTrackPoint();
+
+    if (point == null) {
+      setState(() {
+        statusText = '位置情報を取得できなかったため、メモを記録できませんでした';
+      });
+      return;
+    }
 
     setState(() {
       memoPoints.add(
@@ -225,6 +253,7 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
         "point_count": trackPoints.length,
         "created_at": DateTime.now().toIso8601String(),
         "is_test_data": trackPoints.any((point) => point.isTestData),
+        "operation_mode": operationMode,
       }
     };
 
@@ -244,6 +273,7 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
           "recorder_name": recorderName.isEmpty ? "unknown" : recorderName,
           "recorded_at": memoPoint.time.toIso8601String(),
           "is_test_data": memoPoint.isTestData,
+          "operation_mode": operationMode,
         }
       };
     }).toList();
@@ -357,6 +387,46 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
 
                   const SizedBox(height: 24),
 
+                  const Text(
+                    '動作モード',
+                    style: TextStyle(fontSize: 16),
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment<String>(
+                        value: 'test',
+                        label: Text('PCテスト用'),
+                      ),
+                      ButtonSegment<String>(
+                        value: 'production',
+                        label: Text('実運用'),
+                      ),
+                    ],
+                    selected: {operationMode},
+                    onSelectionChanged: isRecording
+                        ? null
+                        : (Set<String> selected) {
+                            setState(() {
+                              operationMode = selected.first;
+                            });
+                          },
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  Text(
+                    operationMode == 'test'
+                        ? 'PCテスト用：GPS取得に失敗した場合、テスト座標を記録します'
+                        : '実運用：GPS取得失敗時や精度10m超の点は記録しません',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 13),
+                  ),
+
+                  const SizedBox(height: 24),
+
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -399,41 +469,41 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
                   ),
 
                   if (geoJsonText.isNotEmpty) ...[
-  const SizedBox(height: 24),
+                    const SizedBox(height: 24),
 
-  const Text(
-    '保存方法',
-    style: TextStyle(fontSize: 16),
-  ),
+                    const Text(
+                      '保存方法',
+                      style: TextStyle(fontSize: 16),
+                    ),
 
-  const SizedBox(height: 8),
+                    const SizedBox(height: 8),
 
-  SegmentedButton<String>(
-    segments: const [
-      ButtonSegment<String>(
-        value: 'download',
-        label: Text('端末保存'),
-      ),
-      ButtonSegment<String>(
-        value: 'googleDrive',
-        label: Text('Drive送信'),
-      ),
-    ],
-    selected: {saveMethod},
-    onSelectionChanged: (Set<String> selected) {
-      setState(() {
-        saveMethod = selected.first;
-      });
-    },
-  ),
+                    SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment<String>(
+                          value: 'download',
+                          label: Text('端末保存'),
+                        ),
+                        ButtonSegment<String>(
+                          value: 'googleDrive',
+                          label: Text('Drive送信'),
+                        ),
+                      ],
+                      selected: {saveMethod},
+                      onSelectionChanged: (Set<String> selected) {
+                        setState(() {
+                          saveMethod = selected.first;
+                        });
+                      },
+                    ),
 
-  const SizedBox(height: 12),
+                    const SizedBox(height: 12),
 
-  ElevatedButton(
-    onPressed: isRecording ? null : saveRouteRecord,
-    child: const Text('ルート記録保存'),
-  ),
-],
+                    ElevatedButton(
+                      onPressed: isRecording ? null : saveRouteRecord,
+                      child: const Text('ルート記録保存'),
+                    ),
+                  ],
 
                   const SizedBox(height: 32),
 
