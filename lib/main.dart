@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+// Flutter Webでファイルダウンロードを使うため
 // ignore: avoid_web_libraries_in_flutter
 import 'dart:html' as html;
 
@@ -55,6 +56,11 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
   String geoJsonText = '';
   String recorderName = '';
 
+  // 保存方法
+  // download: 端末にダウンロード
+  // googleDrive: 将来Google Drive送信用
+  String saveMethod = 'download';
+
   bool isRecording = false;
   int testCount = 0;
 
@@ -101,6 +107,8 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
         isTestData: false,
       );
     } catch (e) {
+      // PCでGPSが使えない場合のテスト座標
+      // 新宿駅付近から少しずつ動く
       testCount++;
 
       return TrackPoint(
@@ -117,6 +125,7 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
 
     setState(() {
       trackPoints.add(point);
+
       latitudeText = roundTo6(point.latitude).toString();
       longitudeText = roundTo6(point.longitude).toString();
 
@@ -191,7 +200,7 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
   void createGeoJson() {
     if (trackPoints.length < 2) {
       setState(() {
-        geoJsonText = 'GeoJSONを作るには2点以上の記録が必要です';
+        geoJsonText = 'ルート記録を作るには2点以上の記録が必要です';
       });
       return;
     }
@@ -249,23 +258,22 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
 
     setState(() {
       geoJsonText = const JsonEncoder.withIndent('  ').convert(geoJson);
-      statusText = 'GeoJSONを作成しました';
+      statusText = 'ルート記録を作成しました';
     });
   }
 
   void downloadGeoJson() {
     if (geoJsonText.isEmpty) {
       setState(() {
-        statusText = '先にGeoJSONを作成してください';
+        statusText = '先にルート記録を作成してください';
       });
       return;
     }
 
     final now = DateTime.now();
 
-    final safeRecorderName = recorderName
-        .trim()
-        .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+    final safeRecorderName =
+        recorderName.trim().replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
 
     final namePart = safeRecorderName.isEmpty ? 'unknown' : safeRecorderName;
 
@@ -287,8 +295,22 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
     html.Url.revokeObjectUrl(url);
 
     setState(() {
-      statusText = 'GeoJSONファイルをダウンロードしました';
+      statusText = 'ルート記録ファイルをダウンロードしました';
     });
+  }
+
+  void saveRouteRecord() {
+    if (saveMethod == 'download') {
+      downloadGeoJson();
+      return;
+    }
+
+    if (saveMethod == 'googleDrive') {
+      setState(() {
+        statusText = 'Google Driveへのルート記録送信はまだ未実装です';
+      });
+      return;
+    }
   }
 
   @override
@@ -373,14 +395,42 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
 
                   ElevatedButton(
                     onPressed: isRecording ? null : createGeoJson,
-                    child: const Text('GeoJSON作成'),
+                    child: const Text('ルート記録作成'),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  const Text(
+                    '保存方法',
+                    style: TextStyle(fontSize: 16),
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment<String>(
+                        value: 'download',
+                        label: Text('DL保存'),
+                      ),
+                      ButtonSegment<String>(
+                        value: 'googleDrive',
+                        label: Text('Drive送信'),
+                      ),
+                    ],
+                    selected: {saveMethod},
+                    onSelectionChanged: (Set<String> selected) {
+                      setState(() {
+                        saveMethod = selected.first;
+                      });
+                    },
                   ),
 
                   const SizedBox(height: 12),
 
                   ElevatedButton(
-                    onPressed: isRecording ? null : downloadGeoJson,
-                    child: const Text('GeoJSONダウンロード'),
+                    onPressed: isRecording ? null : saveRouteRecord,
+                    child: const Text('ルート記録保存'),
                   ),
 
                   const SizedBox(height: 32),
