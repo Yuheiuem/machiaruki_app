@@ -439,7 +439,7 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
                   Text(
                     operationMode == 'test'
                         ? 'PCテスト用：GPS取得に失敗した場合、テスト座標を記録します'
-                        : '実運用：GPS取得失敗時や精度10m超の点は記録しません',
+                        : '実運用：GPS取得失敗時や精度25m超の点は記録しません',
                     textAlign: TextAlign.center,
                     style: const TextStyle(fontSize: 13),
                   ),
