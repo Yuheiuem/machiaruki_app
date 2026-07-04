@@ -168,7 +168,6 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
       statusText = '記録を開始しました';
       trackPoints.clear();
       memoPoints.clear();
-      memoPoints.clear();
       mapTrackPoints.clear();
       mapMemoPoints.clear();
       geoJsonText = '';
