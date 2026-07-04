@@ -111,8 +111,8 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
         ),
       );
 
-      // 実運用では、accuracy が10mより悪い点は記録しない
-      if (operationMode == 'production' && position.accuracy > 10) {
+      // 実運用では、accuracy が25mより悪い点は記録しない
+      if (operationMode == 'production' && position.accuracy > 25) {
         return null;
       }
 
