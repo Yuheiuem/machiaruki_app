@@ -59,17 +59,20 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
   String geoJsonText = '';
   String recorderName = '';
   String checkType = '出発';
+  bool hasStartedCheck = false;
 
   final String checkAppsScriptUrl =
      'https://script.google.com/macros/s/AKfycbyn8uGV6sfkWDBUvjldtQ89ptLehWCtt4W7S-q-aKnHie3fRLIQnOkM1jNmjMCDiuRG/exec';
   final String checkKey = 'machiaruki-check-key';
+  //出発終了確認
   final String googleAppsScriptUrl = 
      'https://script.google.com/macros/s/AKfycbxX_mTqb94aj23r-Mq1qEhFa3OAzSfAyaRXsozF8oLSs-VEaeZ4JP0LhNnM-7-QbsaVxQ/exec';
   final String uploadKey = 'machiaruki-test-key';
+  //GoosleDrive送信用
 
   // 保存方法
   // download: 端末保存
-  // googleDrive: 将来Google Drive送信用
+  
   String saveMethod = 'download';
 
   // 動作モード
@@ -507,11 +510,16 @@ Future<void> sendCheckRecord() async {
 
     final result = jsonDecode(response.body);
 
-    if (result['ok'] == true) {
-      setState(() {
-        statusText = '$checkType確認を送信しました';
-      });
-    } else {
+   if (result['ok'] == true) {
+  setState(() {
+    if (checkType == '出発') {
+      hasStartedCheck = true;
+    }
+
+    statusText = '$checkType確認を送信しました';
+  });
+}
+    else {
       setState(() {
         statusText = '$checkType確認の送信に失敗しました：${result['message']}';
       });
@@ -640,6 +648,22 @@ ElevatedButton(
 
 const SizedBox(height: 24),
 
+if (!hasStartedCheck) ...[
+  const SizedBox(height: 24),
+
+  const Text(
+    '出発確認を送信すると、記録機能が表示されます',
+    textAlign: TextAlign.center,
+    style: TextStyle(
+      fontSize: 14,
+      fontWeight: FontWeight.bold,
+      color: Colors.red,
+    ),
+  ),
+],
+
+if (hasStartedCheck) ...[       //ここから非表示/表示切替
+
                   const Text(
                     '動作モード',
                     style: TextStyle(fontSize: 16),
@@ -683,14 +707,14 @@ const SizedBox(height: 24),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      ElevatedButton(
-                        onPressed: isRecording ? null : startRecording,
-                        child: const Text('記録開始'),
+                  ElevatedButton(
+                    onPressed: (!hasStartedCheck || isRecording) ? null : startRecording,
+                    child: const Text('記録開始'),
                       ),
                       const SizedBox(width: 16),
-                      ElevatedButton(
-                        onPressed: isRecording ? stopRecording : null,
-                        child: const Text('記録停止'),
+                  ElevatedButton(
+                      onPressed: isRecording ? stopRecording : null,
+                      child: const Text('記録停止'),
                       ),
                     ],
                   ),
@@ -710,16 +734,16 @@ const SizedBox(height: 24),
                   const SizedBox(height: 12),
 
                   ElevatedButton(
-                    onPressed: addMemoPoint,
+                     onPressed: hasStartedCheck ? addMemoPoint : null,
                     child: const Text('メモを記録する'),
                   ),
 
                   const SizedBox(height: 24),
 
-                  ElevatedButton(
-                    onPressed: isRecording ? null : createGeoJson,
+                 ElevatedButton(
+                    onPressed: (!hasStartedCheck || isRecording) ? null : createGeoJson,
                     child: const Text('ルート・メモ記録作成'),
-                  ),
+                   ),
 
                   if (geoJsonText.isNotEmpty) ...[
                     const SizedBox(height: 24),
@@ -754,14 +778,14 @@ const SizedBox(height: 24),
 
                     if (saveMethod == 'download') ...[
                       ElevatedButton(
-                        onPressed: isRecording ? null : saveRouteRecord,
+                        onPressed: (!hasStartedCheck || isRecording) ? null : saveRouteRecord,
                         child: const Text('ルート記録保存'),
                       ),
 
                       const SizedBox(height: 8),
 
                       ElevatedButton(
-                        onPressed: isRecording ? null : downloadMemoCsv,
+                        onPressed: (!hasStartedCheck || isRecording) ? null : downloadMemoCsv,
                         child: const Text('メモ一覧CSV保存'),
                       ),
                     ] else ...[
@@ -807,7 +831,7 @@ const Text(
 const SizedBox(height: 8),
 
 ElevatedButton(
-  onPressed: updateMapPreview,
+  onPressed: hasStartedCheck ? updateMapPreview : null,
   child: const Text('地図更新'),
 ),
 
@@ -855,8 +879,8 @@ SizedBox(
         memoPoint.latitude,
         memoPoint.longitude,
       ),
-      width: 72,
-      height: 72,
+      width: 40,
+      height: 40,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () {
@@ -952,6 +976,7 @@ else
                         ),
                       ),
                     ),
+] //非表示/表示切替
                 ],
               ),
             ),
