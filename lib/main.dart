@@ -85,6 +85,43 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
     return double.parse(value.toStringAsFixed(6));
   }
 
+  String formatDateTime(DateTime dateTime) {
+  String twoDigits(int n) {
+    return n.toString().padLeft(2, '0');
+  }
+
+  final year = dateTime.year.toString();
+  final month = twoDigits(dateTime.month);
+  final day = twoDigits(dateTime.day);
+  final hour = twoDigits(dateTime.hour);
+  final minute = twoDigits(dateTime.minute);
+  final second = twoDigits(dateTime.second);
+
+  return '$year-$month-$day $hour:$minute:$second';
+}
+
+  String escapeCsvValue(String value) {
+  final escaped = value.replaceAll('"', '""');
+  return '"$escaped"';
+}
+
+String createMemoCsvText() {
+  final lines = <String>[];
+
+  lines.add('memo,time,latitude,longitude');
+
+  for (final memoPoint in memoPoints) {
+    lines.add([
+      escapeCsvValue(memoPoint.memo),
+      escapeCsvValue(formatDateTime(memoPoint.time)),
+      memoPoint.latitude.toStringAsFixed(6),
+      memoPoint.longitude.toStringAsFixed(6),
+    ].join(','));
+  }
+
+  return lines.join('\n');
+}
+
   Future<TrackPoint?> getCurrentTrackPoint() async {
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
@@ -347,6 +384,37 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
     });
   }
 
+  void downloadMemoCsv() {
+  final csvText = createMemoCsvText();
+
+  final now = DateTime.now();
+
+  final safeRecorderName =
+      recorderName.trim().replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+
+  final namePart = safeRecorderName.isEmpty ? 'unknown' : safeRecorderName;
+
+  final fileName =
+      'memo_${namePart}_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}.csv';
+
+  final blob = html.Blob(
+    ['\uFEFF$csvText'],
+    'text/csv;charset=utf-8',
+  );
+
+  final url = html.Url.createObjectUrlFromBlob(blob);
+
+  html.AnchorElement(href: url)
+    ..setAttribute('download', fileName)
+    ..click();
+
+  html.Url.revokeObjectUrl(url);
+
+  setState(() {
+    statusText = 'メモ一覧CSVをダウンロードしました';
+  });
+}
+
   void saveRouteRecord() {
     if (saveMethod == 'download') {
       downloadGeoJson();
@@ -483,7 +551,7 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
 
                   ElevatedButton(
                     onPressed: isRecording ? null : createGeoJson,
-                    child: const Text('ルート記録作成'),
+                    child: const Text('ルート・メモ記録作成'),
                   ),
 
                   if (geoJsonText.isNotEmpty) ...[
@@ -517,10 +585,24 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
 
                     const SizedBox(height: 12),
 
-                    ElevatedButton(
-                      onPressed: isRecording ? null : saveRouteRecord,
-                      child: const Text('ルート記録保存'),
-                    ),
+                    if (saveMethod == 'download') ...[
+                     ElevatedButton(
+                       onPressed: isRecording ? null : saveRouteRecord,
+                       child: const Text('ルート記録保存'),
+                      ),
+
+                    const SizedBox(height: 8),
+
+                     ElevatedButton(
+                       onPressed: isRecording ? null : downloadMemoCsv,
+                       child: const Text('メモ一覧CSV保存'),
+                      ),
+                    ] else ...[
+                     ElevatedButton(
+                       onPressed: isRecording ? null : saveRouteRecord,
+                      child: const Text('Drive送信'),
+                      ),
+                    ],
                   ],
 
                   const SizedBox(height: 32),
@@ -645,6 +727,36 @@ SizedBox(
 ),
 
                   const SizedBox(height: 24),
+
+                  const SizedBox(height: 24),
+
+const Text(
+  'メモ一覧',
+  style: TextStyle(
+    fontSize: 18,
+    fontWeight: FontWeight.bold,
+  ),
+),
+
+const SizedBox(height: 8),
+
+if (memoPoints.isEmpty)
+  const Text('まだメモはありません')
+else
+  Column(
+    children: memoPoints.map((memoPoint) {
+      return Card(
+        child: ListTile(
+          title: Text(memoPoint.memo),
+          subtitle: Text(
+            '${formatDateTime(memoPoint.time)}\n'
+            '緯度：${memoPoint.latitude.toStringAsFixed(6)} / '
+            '経度：${memoPoint.longitude.toStringAsFixed(6)}',
+          ),
+        ),
+      );
+    }).toList(),
+  ),
 
                   if (trackPoints.isNotEmpty)
                     Text(
