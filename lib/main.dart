@@ -905,7 +905,7 @@ SizedBox(
         child: const Center(
           child: Icon(
             Icons.location_pin,
-            size: 48,
+            size: 30,
             color: Colors.red,
           ),
         ),
