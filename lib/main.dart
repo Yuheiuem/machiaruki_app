@@ -742,7 +742,7 @@ if (hasStartedCheck) ...[       //ここから非表示/表示切替
 
                  ElevatedButton(
                     onPressed: (!hasStartedCheck || isRecording) ? null : createGeoJson,
-                    child: const Text('ルート・メモ記録作成'),
+                    child: const Text('保存/送信用ルート・メモ記録作成'),
                    ),
 
                   if (geoJsonText.isNotEmpty) ...[
