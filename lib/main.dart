@@ -58,8 +58,13 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
   String longitudeText = '未取得';
   String geoJsonText = '';
   String recorderName = '';
+  String checkType = '出発';
+
+  final String checkAppsScriptUrl =
+     'https://script.google.com/macros/s/AKfycbyn8uGV6sfkWDBUvjldtQ89ptLehWCtt4W7S-q-aKnHie3fRLIQnOkM1jNmjMCDiuRG/exec';
+  final String checkKey = 'machiaruki-check-key';
   final String googleAppsScriptUrl = 
-  'https://script.google.com/macros/s/AKfycbxX_mTqb94aj23r-Mq1qEhFa3OAzSfAyaRXsozF8oLSs-VEaeZ4JP0LhNnM-7-QbsaVxQ/exec';
+     'https://script.google.com/macros/s/AKfycbxX_mTqb94aj23r-Mq1qEhFa3OAzSfAyaRXsozF8oLSs-VEaeZ4JP0LhNnM-7-QbsaVxQ/exec';
   final String uploadKey = 'machiaruki-test-key';
 
   // 保存方法
@@ -469,6 +474,55 @@ Future<void> sendToGoogleDrive() async {
   }
 }
 
+Future<void> sendCheckRecord() async {
+  final name = recorderName.trim();
+
+  if (name.isEmpty) {
+    setState(() {
+      statusText = '先に記録者名を入力してください';
+    });
+    return;
+  }
+
+  setState(() {
+    statusText = '$checkType確認を送信中です...';
+  });
+
+  try {
+    final response = await http.post(
+      Uri.parse(checkAppsScriptUrl),
+      body: jsonEncode({
+        'checkKey': checkKey,
+        'name': name,
+        'checkType': checkType,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      setState(() {
+        statusText = '$checkType確認の送信に失敗しました：HTTP ${response.statusCode}';
+      });
+      return;
+    }
+
+    final result = jsonDecode(response.body);
+
+    if (result['ok'] == true) {
+      setState(() {
+        statusText = '$checkType確認を送信しました';
+      });
+    } else {
+      setState(() {
+        statusText = '$checkType確認の送信に失敗しました：${result['message']}';
+      });
+    }
+  } catch (e) {
+    setState(() {
+      statusText = '$checkType確認の送信中にエラーが発生しました：$e';
+    });
+  }
+}
+
   void saveRouteRecord() {
     if (saveMethod == 'download') {
       downloadGeoJson();
@@ -498,20 +552,20 @@ Future<void> sendToGoogleDrive() async {
         ),
 
         bottomNavigationBar: Container(
-         padding: const EdgeInsets.all(12),
-         decoration: BoxDecoration(
-         color: Colors.white,
-         border: Border(
-         top: BorderSide(
-         color: Colors.grey.shade300,
-              ),
-             ),
-           ),
-        child: SafeArea(
-        child: Text(
-         statusText,
-        textAlign: TextAlign.center,
-        style: const TextStyle(
+  padding: const EdgeInsets.all(12),
+  decoration: BoxDecoration(
+    color: Colors.white,
+    border: Border(
+      top: BorderSide(
+        color: Colors.grey.shade300,
+      ),
+    ),
+  ),
+  child: SafeArea(
+    child: Text(
+      statusText,
+      textAlign: TextAlign.center,
+      style: const TextStyle(
         fontSize: 14,
         fontWeight: FontWeight.bold,
       ),
@@ -547,6 +601,44 @@ Future<void> sendToGoogleDrive() async {
                   ),
 
                   const SizedBox(height: 24),
+
+                  const Text(
+  '出発・終了確認',
+  style: TextStyle(
+    fontSize: 18,
+    fontWeight: FontWeight.bold,
+  ),
+),
+
+const SizedBox(height: 8),
+
+SegmentedButton<String>(
+  segments: const [
+    ButtonSegment<String>(
+      value: '出発',
+      label: Text('出発'),
+    ),
+    ButtonSegment<String>(
+      value: '終了',
+      label: Text('終了'),
+    ),
+  ],
+  selected: {checkType},
+  onSelectionChanged: (Set<String> selected) {
+    setState(() {
+      checkType = selected.first;
+    });
+  },
+),
+
+const SizedBox(height: 8),
+
+ElevatedButton(
+  onPressed: sendCheckRecord,
+  child: const Text('確認を送信'),
+),
+
+const SizedBox(height: 24),
 
                   const Text(
                     '動作モード',
