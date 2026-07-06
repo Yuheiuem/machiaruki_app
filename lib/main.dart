@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:http/http.dart' as http;
 
 void main() {
   runApp(const MachiarukiApp());
@@ -57,6 +58,9 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
   String longitudeText = '未取得';
   String geoJsonText = '';
   String recorderName = '';
+  final String googleAppsScriptUrl = 
+  'https://script.google.com/macros/s/AKfycbxX_mTqb94aj23r-Mq1qEhFa3OAzSfAyaRXsozF8oLSs-VEaeZ4JP0LhNnM-7-QbsaVxQ/exec';
+  final String uploadKey = 'machiaruki-test-key';
 
   // 保存方法
   // download: 端末保存
@@ -414,6 +418,56 @@ String createMemoCsvText() {
     statusText = 'メモ一覧CSVをダウンロードしました';
   });
 }
+Future<void> sendToGoogleDrive() async {
+  if (geoJsonText.isEmpty) {
+    setState(() {
+      statusText = '先にルート記録を作成してください';
+    });
+    return;
+  }
+
+  setState(() {
+    statusText = 'Google Driveへ送信中です...';
+  });
+
+  try {
+    final csvText = createMemoCsvText();
+
+    final response = await http.post(
+      Uri.parse(googleAppsScriptUrl),
+      body: jsonEncode({
+        'uploadKey': uploadKey,
+        'recorderName':
+            recorderName.trim().isEmpty ? 'unknown' : recorderName.trim(),
+        'geoJsonText': geoJsonText,
+        'csvText': csvText,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      setState(() {
+        statusText = 'Google Drive送信に失敗しました：HTTP ${response.statusCode}';
+      });
+      return;
+    }
+
+    final result = jsonDecode(response.body);
+
+    if (result['ok'] == true) {
+      setState(() {
+        statusText = 'Google Driveに送信しました';
+      });
+    } else {
+      setState(() {
+        statusText = 'Google Drive送信に失敗しました：${result['message']}';
+      });
+    }
+  } catch (e) {
+    setState(() {
+      statusText = 'Google Drive送信中にエラーが発生しました：$e';
+    });
+  }
+}
 
   void saveRouteRecord() {
     if (saveMethod == 'download') {
@@ -422,11 +476,9 @@ String createMemoCsvText() {
     }
 
     if (saveMethod == 'googleDrive') {
-      setState(() {
-        statusText = 'Google Driveへのルート記録送信はまだ未実装です';
-      });
-      return;
-    }
+  sendToGoogleDrive();
+  return;
+}
   }
 
   @override
@@ -444,6 +496,29 @@ String createMemoCsvText() {
         appBar: AppBar(
           title: const Text('まち歩きアプリ'),
         ),
+
+        bottomNavigationBar: Container(
+         padding: const EdgeInsets.all(12),
+         decoration: BoxDecoration(
+         color: Colors.white,
+         border: Border(
+         top: BorderSide(
+         color: Colors.grey.shade300,
+              ),
+             ),
+           ),
+        child: SafeArea(
+        child: Text(
+         statusText,
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.bold,
+      ),
+    ),
+  ),
+),
+
         body: SingleChildScrollView(
           child: Center(
             child: Padding(
@@ -544,7 +619,7 @@ String createMemoCsvText() {
 
                   ElevatedButton(
                     onPressed: addMemoPoint,
-                    child: const Text('メモ記録'),
+                    child: const Text('メモを記録する'),
                   ),
 
                   const SizedBox(height: 24),
@@ -586,21 +661,21 @@ String createMemoCsvText() {
                     const SizedBox(height: 12),
 
                     if (saveMethod == 'download') ...[
-                     ElevatedButton(
-                       onPressed: isRecording ? null : saveRouteRecord,
-                       child: const Text('ルート記録保存'),
+                      ElevatedButton(
+                        onPressed: isRecording ? null : saveRouteRecord,
+                        child: const Text('ルート記録保存'),
                       ),
 
-                    const SizedBox(height: 8),
+                      const SizedBox(height: 8),
 
-                     ElevatedButton(
-                       onPressed: isRecording ? null : downloadMemoCsv,
-                       child: const Text('メモ一覧CSV保存'),
+                      ElevatedButton(
+                        onPressed: isRecording ? null : downloadMemoCsv,
+                        child: const Text('メモ一覧CSV保存'),
                       ),
                     ] else ...[
-                     ElevatedButton(
-                       onPressed: isRecording ? null : saveRouteRecord,
-                      child: const Text('Drive送信'),
+                      ElevatedButton(
+                        onPressed: isRecording ? null : saveRouteRecord,
+                        child: const Text('Google Driveへ送信'),
                       ),
                     ],
                   ],
@@ -757,6 +832,7 @@ else
       );
     }).toList(),
   ),
+              
 
                   if (trackPoints.isNotEmpty)
                     Text(
