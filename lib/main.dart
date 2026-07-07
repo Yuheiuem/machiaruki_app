@@ -599,14 +599,18 @@ Future<void> sendCheckRecord() async {
                   const SizedBox(height: 24),
 
                   TextField(
-                    decoration: const InputDecoration(
-                      labelText: '記録者名',
-                      border: OutlineInputBorder(),
-                    ),
+                    readOnly: hasStartedCheck,
+                    decoration: InputDecoration(
+                    labelText: '記録者名',
+                    border: const OutlineInputBorder(),
+                    suffixText: hasStartedCheck ? '変更不可' : null,
+                        ),
                     onChanged: (value) {
-                      recorderName = value;
-                    },
-                  ),
+                      if (!hasStartedCheck) {
+                         recorderName = value;
+                            }
+                        },
+                    ),
 
                   const SizedBox(height: 24),
 
