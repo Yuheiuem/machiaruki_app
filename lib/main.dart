@@ -588,7 +588,7 @@ Future<void> sendCheckRecord() async {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const SizedBox(height: 80),
+                  const SizedBox(height: 50),
 
                   Text(
                     statusText,
