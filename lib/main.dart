@@ -887,7 +887,7 @@ SizedBox(
     ),
     children: [
       TileLayer(
-        urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+        urlTemplate: 'https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png', //地理院淡色地図
         userAgentPackageName: 'com.example.machiaruki_app',
       ),
 
