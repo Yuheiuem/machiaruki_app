@@ -83635,7 +83635,7 @@ l=new A.ae6(new A.a0w(l))
 A.d8(3,"retries")
 r=new A.abv(l,!0,A.o(r,r))
 l=$.aHv()
-r=new A.CJ("https://tile.openstreetmap.org/{z}/{x}/{y}.png",r,l,i)
+r=new A.CJ("https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png",r,l,i)
 r.dx=B.Mo
 r.y=1/0
 r.Q=19
