@@ -9,7 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:http/http.dart' as http;
+
 
 void main() {
   runApp(const MachiarukiApp());
@@ -60,6 +60,7 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
   String recorderName = '';
   String checkType = '出発';
   bool hasStartedCheck = false;
+  bool hasFinishedCheck = false;
 
   final String checkAppsScriptUrl =
      'https://script.google.com/macros/s/AKfycbyQNlGg8OTttkZob4rRSmSclN0M4krX3jboT0mk4IZrSOc5C3YEXL-XeqgFUBcx3CQh/exec';
@@ -69,6 +70,9 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
      'https://script.google.com/macros/s/AKfycbzgUobwgg5klknNQXKx_8wtXxJ2GoPsmwavZL4VFNobq6Lty0WdYmVkkW4gxMr2RgL60w/exec';
   final String uploadKey = 'machiaruki-test-key';
   //GoosleDrive送信用
+  final String routeMapPageUrl =
+    'https://script.google.com/macros/s/AKfycbzi92-RH7XEufG2Rjv5HJsdjj5W0yw6UGFBOa6xb00Gz020GsT_BeLO0HHIUFhOnNg9wA/exec';
+  //参加者の歩いたルート表示用
 
   // 保存方法
   
@@ -91,6 +95,8 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
    int mapUpdateCount = 0;
 
   final TextEditingController memoController = TextEditingController();
+
+  final GlobalKey checkSectionKey = GlobalKey();
 
   double roundTo6(double value) {
     return double.parse(value.toStringAsFixed(6));
@@ -544,12 +550,17 @@ Future<void> sendCheckRecord() async {
     form.submit();
 
     setState(() {
-      if (checkType == '出発') {
-        hasStartedCheck = true;
-      }
+     if (checkType == '出発') {
+    hasStartedCheck = true;
+    hasFinishedCheck = false;
+  }
+
+     if (checkType == '終了') {
+    hasFinishedCheck = true;
+  }
 
       statusText = '$checkType確認を送信しました';
-    });
+});
 
     await Future.delayed(const Duration(seconds: 3));
   } catch (e) {
@@ -681,7 +692,18 @@ ElevatedButton(
   child: const Text('確認を送信'),
 ),
 
-const SizedBox(height: 24),
+if (hasFinishedCheck) ...[
+  const SizedBox(height: 16),
+
+  ElevatedButton(
+    onPressed: () {
+      html.window.open(routeMapPageUrl, '_blank');
+    },
+    child: const Text('みんなの歩いたルートを見る'),
+  ),
+],
+
+const SizedBox(height: 16),
 
 if (!hasStartedCheck) ...[
   const SizedBox(height: 24),
@@ -949,6 +971,19 @@ SizedBox(
   }).toList(),
 ),
     ],
+  ),
+),
+
+const SizedBox(height: 4),
+
+const Align(
+  alignment: Alignment.centerRight,
+  child: Text(
+    '出典：国土地理院（地理院タイル）',
+    style: TextStyle(
+      fontSize: 11,
+      color: Colors.grey,
+    ),
   ),
 ),
 
