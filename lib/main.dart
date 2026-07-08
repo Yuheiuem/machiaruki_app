@@ -62,16 +62,15 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
   bool hasStartedCheck = false;
 
   final String checkAppsScriptUrl =
-     'https://script.google.com/macros/s/AKfycbyn8uGV6sfkWDBUvjldtQ89ptLehWCtt4W7S-q-aKnHie3fRLIQnOkM1jNmjMCDiuRG/exec';
+     'https://script.google.com/macros/s/AKfycbyQNlGg8OTttkZob4rRSmSclN0M4krX3jboT0mk4IZrSOc5C3YEXL-XeqgFUBcx3CQh/exec';
   final String checkKey = 'machiaruki-check-key';
   //出発終了確認
   final String googleAppsScriptUrl = 
-     'https://script.google.com/macros/s/AKfycbxX_mTqb94aj23r-Mq1qEhFa3OAzSfAyaRXsozF8oLSs-VEaeZ4JP0LhNnM-7-QbsaVxQ/exec';
+     'https://script.google.com/macros/s/AKfycbzgUobwgg5klknNQXKx_8wtXxJ2GoPsmwavZL4VFNobq6Lty0WdYmVkkW4gxMr2RgL60w/exec';
   final String uploadKey = 'machiaruki-test-key';
   //GoosleDrive送信用
 
   // 保存方法
-  // download: 端末保存
   
   String saveMethod = 'download';
 
@@ -438,42 +437,59 @@ Future<void> sendToGoogleDrive() async {
     statusText = 'Google Driveへ送信中です...';
   });
 
+  html.IFrameElement? iframe;
+  html.FormElement? form;
+
   try {
     final csvText = createMemoCsvText();
+    final recorder =
+        recorderName.trim().isEmpty ? 'unknown' : recorderName.trim();
 
-    final response = await http.post(
-      Uri.parse(googleAppsScriptUrl),
-      body: jsonEncode({
-        'uploadKey': uploadKey,
-        'recorderName':
-            recorderName.trim().isEmpty ? 'unknown' : recorderName.trim(),
-        'geoJsonText': geoJsonText,
-        'csvText': csvText,
-      }),
-    );
+    final frameName =
+        'upload_iframe_${DateTime.now().microsecondsSinceEpoch}';
 
-    if (response.statusCode != 200) {
-      setState(() {
-        statusText = 'Google Drive送信に失敗しました：HTTP ${response.statusCode}';
-      });
-      return;
+    iframe = html.IFrameElement()
+      ..name = frameName
+      ..style.display = 'none';
+
+    html.document.body!.append(iframe);
+
+    form = html.FormElement()
+      ..method = 'POST'
+      ..action = googleAppsScriptUrl
+      ..target = frameName
+      ..style.display = 'none';
+
+    void addField(String fieldName, String value) {
+      final textarea = html.TextAreaElement()
+        ..name = fieldName
+        ..value = value;
+
+      textarea.style.display = 'none';
+      form!.append(textarea);
     }
 
-    final result = jsonDecode(response.body);
+    addField('uploadKey', uploadKey);
+    addField('recorderName', recorder);
+    addField('geoJsonText', geoJsonText);
+    addField('csvText', csvText);
 
-    if (result['ok'] == true) {
-      setState(() {
-        statusText = 'Google Driveに送信しました';
-      });
-    } else {
-      setState(() {
-        statusText = 'Google Drive送信に失敗しました：${result['message']}';
-      });
-    }
+    html.document.body!.append(form);
+
+    form.submit();
+
+    setState(() {
+      statusText = 'Google Driveへ送信しました';
+    });
+
+    await Future.delayed(const Duration(seconds: 5));
   } catch (e) {
     setState(() {
-      statusText = 'Google Drive送信中にエラーが発生しました：$e';
+      statusText = 'Google Drive送信に失敗しました。もう一度送信してください';
     });
+  } finally {
+    form?.remove();
+    iframe?.remove();
   }
 }
 
@@ -491,57 +507,72 @@ Future<void> sendCheckRecord() async {
     statusText = '$checkType確認を送信中です...';
   });
 
+  html.IFrameElement? iframe;
+  html.FormElement? form;
+
   try {
-    final response = await http.post(
-      Uri.parse(checkAppsScriptUrl),
-      body: jsonEncode({
-        'checkKey': checkKey,
-        'name': name,
-        'checkType': checkType,
-      }),
-    );
+    final frameName =
+        'check_iframe_${DateTime.now().microsecondsSinceEpoch}';
 
-    if (response.statusCode != 200) {
-      setState(() {
-        statusText = '$checkType確認の送信に失敗しました：HTTP ${response.statusCode}';
-      });
-      return;
+    iframe = html.IFrameElement()
+      ..name = frameName
+      ..style.display = 'none';
+
+    html.document.body!.append(iframe);
+
+    form = html.FormElement()
+      ..method = 'POST'
+      ..action = checkAppsScriptUrl
+      ..target = frameName
+      ..style.display = 'none';
+
+    void addField(String fieldName, String value) {
+      final textarea = html.TextAreaElement()
+        ..name = fieldName
+        ..value = value;
+
+      textarea.style.display = 'none';
+      form!.append(textarea);
     }
 
-    final result = jsonDecode(response.body);
+    addField('checkKey', checkKey);
+    addField('name', name);
+    addField('checkType', checkType);
 
-   if (result['ok'] == true) {
-  setState(() {
-    if (checkType == '出発') {
-      hasStartedCheck = true;
-    }
+    html.document.body!.append(form);
 
-    statusText = '$checkType確認を送信しました';
-  });
-}
-    else {
-      setState(() {
-        statusText = '$checkType確認の送信に失敗しました：${result['message']}';
-      });
-    }
+    form.submit();
+
+    setState(() {
+      if (checkType == '出発') {
+        hasStartedCheck = true;
+      }
+
+      statusText = '$checkType確認を送信しました';
+    });
+
+    await Future.delayed(const Duration(seconds: 3));
   } catch (e) {
     setState(() {
-      statusText = '$checkType確認の送信中にエラーが発生しました：$e';
+      statusText = '$checkType確認の送信に失敗しました。もう一度送信してください';
     });
+  } finally {
+    form?.remove();
+    iframe?.remove();
   }
 }
 
-  void saveRouteRecord() {
-    if (saveMethod == 'download') {
-      downloadGeoJson();
-      return;
-    }
-
-    if (saveMethod == 'googleDrive') {
-  sendToGoogleDrive();
-  return;
-}
+void saveRouteRecord() {
+  if (saveMethod == 'download') {
+    downloadGeoJson();
+    return;
   }
+
+  if (saveMethod == 'googleDrive') {
+    sendToGoogleDrive();
+    return;
+  }
+}
 
   @override
   void dispose() {
