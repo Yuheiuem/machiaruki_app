@@ -10,7 +10,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
-const String appVersion = 'v1.30';  //バージョン表示
+const String appVersion = 'v1.31';  //バージョン表示
 
 
 
@@ -114,7 +114,7 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
 
   final TextEditingController memoController = TextEditingController();
 
-  final GlobalKey checkSectionKey = GlobalKey();
+
 
   double roundTo6(double value) {
     return double.parse(value.toStringAsFixed(6));
@@ -545,20 +545,6 @@ void startPauseTimer() {
   });
 }
 
-void scrollToCheckSection() {
-  final targetContext = checkSectionKey.currentContext;
-
-  if (targetContext == null) {
-    return;
-  }
-
-  Scrollable.ensureVisible(
-    targetContext,
-    duration: const Duration(milliseconds: 500),
-    curve: Curves.easeInOut,
-    alignment: 0.1,
-  );
-}
 
 Future<void> sendToGoogleDrive() async {
   if (geoJsonText.isEmpty) {
