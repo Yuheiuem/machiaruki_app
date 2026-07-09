@@ -829,39 +829,197 @@ if (currentStep == AppStep.finishCheck) ...[
   ),
 
   if (hasFinishedCheck) ...[
-    const SizedBox(height: 16),
+  const SizedBox(height: 16),
 
-    ElevatedButton(
+  const Text(
+    'ご参加ありがとうございます。お疲れ様でした',
+    textAlign: TextAlign.center,
+    style: TextStyle(
+      fontSize: 18,
+      fontWeight: FontWeight.bold,
+    ),
+  ),
+
+  const SizedBox(height: 16),
+
+  ElevatedButton(
     onPressed: () {
       html.window.open(routeMapPageUrl, '_blank');
     },
     child: const Text('みんなの歩いたルートを見る'),
+  ),
+
+  const SizedBox(height: 16),
+
+  const Text(
+    '記録内容の確認',
+    style: TextStyle(
+      fontSize: 18,
+      fontWeight: FontWeight.bold,
+    ),
+  ),
+
+  const SizedBox(height: 16),
+
+  const Text(
+    'ルート確認',
+    style: TextStyle(fontSize: 16),
+  ),
+
+  const SizedBox(height: 8),
+
+  if (trackPoints.length < 2)
+    const Text(
+      'ルート表示には2点以上の記録が必要です',
+      textAlign: TextAlign.center,
+    )
+  else ...[
+    SizedBox(
+      height: 300,
+      child: FlutterMap(
+        options: MapOptions(
+          initialCenter: LatLng(
+            trackPoints.last.latitude,
+            trackPoints.last.longitude,
+          ),
+          initialZoom: 16,
+        ),
+        children: [
+          TileLayer(
+            urlTemplate:
+                'https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',
+            userAgentPackageName: 'com.example.machiaruki_app',
+          ),
+
+          PolylineLayer(
+            polylines: [
+              Polyline(
+                points: trackPoints.map((point) {
+                  return LatLng(
+                    point.latitude,
+                    point.longitude,
+                  );
+                }).toList(),
+                strokeWidth: 4,
+                color: Colors.blue,
+              ),
+            ],
+          ),
+
+          MarkerLayer(
+            markers: memoPoints.map((memoPoint) {
+              return Marker(
+                point: LatLng(
+                  memoPoint.latitude,
+                  memoPoint.longitude,
+                ),
+                width: 40,
+                height: 40,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    showDialog(
+                      context: context,
+                      builder: (BuildContext dialogContext) {
+                        return AlertDialog(
+                          title: const Text('メモ'),
+                          content: Text(memoPoint.memo),
+                          actions: [
+                            TextButton(
+                              onPressed: () {
+                                Navigator.of(dialogContext).pop();
+                              },
+                              child: const Text('閉じる'),
+                            ),
+                          ],
+                        );
+                      },
+                    );
+                  },
+                  child: const Center(
+                    child: Icon(
+                      Icons.location_pin,
+                      size: 30,
+                      color: Colors.red,
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
     ),
 
-   const SizedBox(height: 24),
+    const SizedBox(height: 4),
 
-   const Text(
+    const Align(
+      alignment: Alignment.centerRight,
+      child: Text(
+        '出典：国土地理院（地理院タイル）',
+        style: TextStyle(
+          fontSize: 11,
+          color: Colors.grey,
+        ),
+      ),
+    ),
+  ],
+
+  const SizedBox(height: 24),
+
+  const Text(
+    'メモ一覧',
+    style: TextStyle(
+      fontSize: 16,
+      fontWeight: FontWeight.bold,
+    ),
+  ),
+
+  const SizedBox(height: 8),
+
+  if (memoPoints.isEmpty)
+    const Text('記録されたメモはありません')
+  else
+    Column(
+      children: memoPoints.map((memoPoint) {
+        return Card(
+          child: ListTile(
+            title: Text(memoPoint.memo),
+            subtitle: Text(
+              '${formatDateTime(memoPoint.time)}\n'
+              '緯度：${memoPoint.latitude.toStringAsFixed(6)} / '
+              '経度：${memoPoint.longitude.toStringAsFixed(6)}',
+            ),
+          ),
+        );
+      }).toList(),
+    ),
+
+  const SizedBox(height: 24),
+
+  
+  const Text(
     '必要な場合のみ端末に保存してください',
     style: TextStyle(
       fontSize: 16,
       fontWeight: FontWeight.bold,
-        ),
-      ),
+    ),
+  ),
 
   const SizedBox(height: 8),
 
   ElevatedButton(
     onPressed: geoJsonText.isEmpty ? null : downloadGeoJson,
     child: const Text('ルート記録を端末保存'),
-     ),
+  ),
 
   const SizedBox(height: 8),
 
   ElevatedButton(
     onPressed: downloadMemoCsv,
     child: const Text('メモ一覧CSVを端末保存'),
-     ),
-   ],
+  ),
+ ],
 ],
 
 
@@ -881,27 +1039,27 @@ if (currentStep == AppStep.recording ||
                   const SizedBox(height: 8),
 
                   SegmentedButton<String>(
-                    segments: const [
+                    segments: [
                       ButtonSegment<String>(
                         value: 'test',
-                        label: Text('PCテスト用'),
-                      ),
+                        label: const Text('PCテスト用'),
+                        enabled: recordStatus == RecordStatus.notStarted,
+                       ),
                       ButtonSegment<String>(
-                        value: 'production',
-                        label: Text('実運用'),
-                      ),
-                    ],
+                         value: 'production',
+                         label: const Text('実運用'),
+                         enabled: recordStatus == RecordStatus.notStarted,
+                       ),
+                     ],
                     selected: {operationMode},
-                    onSelectionChanged:
-                        (currentStep == AppStep.recording && !isRecording)
-                            ? (Set<String> selected) {
-                                setState(() {
-                                  operationMode = selected.first;
-                                });
-                              }
-                            : null,
-                  ),
-
+                    onSelectionChanged: recordStatus == RecordStatus.notStarted
+                      ? (Set<String> selected) {
+                          setState(() {
+                           operationMode = selected.first;
+                            });
+                         }
+                   : null,
+),
                   const SizedBox(height: 12),
 
                   Text(
