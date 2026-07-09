@@ -59,6 +59,13 @@ enum AppStep {
   finishCheck,
 }
 
+enum RecordStatus {
+  notStarted,
+  recording,
+  paused,
+  finished,
+}
+
 class _MachiarukiAppState extends State<MachiarukiApp> {
   String statusText = '記録を開始してください';
   String latitudeText = '未取得';
@@ -69,6 +76,10 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
   bool hasStartedCheck = false;
   bool hasFinishedCheck = false;
   AppStep currentStep = AppStep.departureCheck;
+  RecordStatus recordStatus = RecordStatus.notStarted;
+  DateTime? pausedAt;
+  String pausedElapsedText = '0秒';
+  Timer? pauseTimer;
 
 
   final String checkAppsScriptUrl =
@@ -119,6 +130,33 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
   final second = twoDigits(dateTime.second);
 
   return '$year-$month-$day $hour:$minute:$second';
+}
+
+String formatClockTime(DateTime dateTime) {
+  String twoDigits(int n) {
+    return n.toString().padLeft(2, '0');
+  }
+
+  final hour = twoDigits(dateTime.hour);
+  final minute = twoDigits(dateTime.minute);
+
+  return '$hour:$minute';
+}
+
+String formatDurationText(Duration duration) {
+  final hours = duration.inHours;
+  final minutes = duration.inMinutes.remainder(60);
+  final seconds = duration.inSeconds.remainder(60);
+
+  if (hours > 0) {
+    return '$hours時間$minutes分$seconds秒';
+  }
+
+  if (minutes > 0) {
+    return '$minutes分$seconds秒';
+  }
+
+  return '$seconds秒';
 }
 
   String escapeCsvValue(String value) {
@@ -220,37 +258,79 @@ String createMemoCsvText() {
     });
   }
 
+  void startLocationRecordingTimer() {
+  timer?.cancel();
+
+  addTrackPoint();
+
+  timer = Timer.periodic(
+    const Duration(seconds: 5),
+    (timer) {
+      addTrackPoint();
+    },
+  );
+}
+
   void startRecording() {
-    setState(() {
-      isRecording = true;
-      statusText = '記録を開始しました';
-      trackPoints.clear();
-      memoPoints.clear();
-      mapTrackPoints.clear();
-      mapMemoPoints.clear();
-      geoJsonText = '';
-      testCount = 0;
-      latitudeText = '未取得';
-      longitudeText = '未取得';
-    });
+  pauseTimer?.cancel();
 
-    addTrackPoint();
+  setState(() {
+    isRecording = true;
+    recordStatus = RecordStatus.recording;
+    currentStep = AppStep.recording;
+    statusText = '記録を開始しました';
+    trackPoints.clear();
+    memoPoints.clear();
+    mapTrackPoints.clear();
+    mapMemoPoints.clear();
+    geoJsonText = '';
+    testCount = 0;
+    latitudeText = '未取得';
+    longitudeText = '未取得';
+    pausedAt = null;
+    pausedElapsedText = '0秒';
+  });
 
-    timer = Timer.periodic(
-      const Duration(seconds: 5),
-      (timer) {
-        addTrackPoint();
-      },
-    );
-  }
+  startLocationRecordingTimer();
+}
 
- void stopRecording() {
-    timer?.cancel();
+ void pauseRecording() {
+  timer?.cancel();
 
   setState(() {
     isRecording = false;
+    recordStatus = RecordStatus.paused;
+    pausedAt = DateTime.now();
+    pausedElapsedText = '0秒';
+    statusText = '記録を一時停止しています';
+  });
+
+  startPauseTimer();
+}
+
+void resumeRecording() {
+  pauseTimer?.cancel();
+
+  setState(() {
+    isRecording = true;
+    recordStatus = RecordStatus.recording;
+    pausedAt = null;
+    pausedElapsedText = '0秒';
+    statusText = '記録を再開しました';
+  });
+
+  startLocationRecordingTimer();
+}
+
+void finishRecording() {
+  timer?.cancel();
+  pauseTimer?.cancel();
+
+  setState(() {
+    isRecording = false;
+    recordStatus = RecordStatus.finished;
     currentStep = AppStep.saveRecord;
-    statusText = '記録を停止しました。保存/送信用データを作成してください';
+    statusText = '記録を終了しました。保存/送信用データを作成してください';
   });
 }
 
@@ -300,6 +380,31 @@ String createMemoCsvText() {
 
     statusText = '地図プレビューを更新しました';
   });
+}
+
+void updatePausedElapsedText() {
+  if (pausedAt == null || !mounted) {
+    return;
+  }
+
+  final elapsed = DateTime.now().difference(pausedAt!);
+
+  setState(() {
+    pausedElapsedText = formatDurationText(elapsed);
+  });
+}
+
+void startPauseTimer() {
+  pauseTimer?.cancel();
+
+  updatePausedElapsedText();
+
+  pauseTimer = Timer.periodic(
+    const Duration(seconds: 1),
+    (timer) {
+      updatePausedElapsedText();
+    },
+  );
 }
 
   void createGeoJson() {
@@ -600,10 +705,11 @@ Future<void> sendCheckRecord() async {
 
   @override
   void dispose() {
-    timer?.cancel();
-    memoController.dispose();
-    super.dispose();
-  }
+  timer?.cancel();
+  pauseTimer?.cancel();
+  memoController.dispose();
+  super.dispose();
+}
 
   @override
   Widget build(BuildContext context) {
@@ -808,43 +914,110 @@ if (currentStep == AppStep.recording ||
 
                   const SizedBox(height: 24),
 
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                  ElevatedButton(
-                    onPressed: (currentStep == AppStep.recording && !isRecording)
-                        ? startRecording
-                        : null,
-                    child: const Text('記録開始'),
-                      ),
-                      const SizedBox(width: 16),
-                  ElevatedButton(
-                      onPressed: isRecording ? stopRecording : null,
-                      child: const Text('記録停止'),
-                      ),
-                    ],
-                  ),
+                  if (recordStatus != RecordStatus.paused) ...[
+  Row(
+    mainAxisAlignment: MainAxisAlignment.center,
+    children: [
+      ElevatedButton(
+        onPressed: recordStatus == RecordStatus.notStarted
+            ? startRecording
+            : null,
+        child: const Text('記録開始'),
+      ),
 
+      const SizedBox(width: 16),
+
+      ElevatedButton(
+        onPressed: recordStatus == RecordStatus.recording
+            ? pauseRecording
+            : null,
+        child: const Text('一時停止'),
+      ),
+    ],
+  ),
+],
+
+if (recordStatus == RecordStatus.paused) ...[
+  const SizedBox(height: 16),
+
+  const Text(
+    '記録を一時停止しています',
+    style: TextStyle(
+      fontSize: 18,
+      fontWeight: FontWeight.bold,
+    ),
+  ),
+
+  const SizedBox(height: 8),
+
+  Text(
+    pausedAt == null
+        ? '停止時刻：未取得'
+        : '停止時刻：${formatClockTime(pausedAt!)}',
+    style: const TextStyle(fontSize: 15),
+  ),
+
+  const SizedBox(height: 4),
+
+  Text(
+    '停止してから：$pausedElapsedText',
+    style: const TextStyle(fontSize: 15),
+  ),
+
+  const SizedBox(height: 12),
+
+  const Text(
+    '一時停止中に移動した場合、再開後のルートが不自然になる可能性があります。',
+    textAlign: TextAlign.center,
+    style: TextStyle(
+      fontSize: 13,
+      fontWeight: FontWeight.bold,
+      color: Colors.red,
+    ),
+  ),
+
+  const SizedBox(height: 16),
+
+  Row(
+    mainAxisAlignment: MainAxisAlignment.center,
+    children: [
+      ElevatedButton(
+        onPressed: resumeRecording,
+        child: const Text('記録を再開'),
+      ),
+
+      const SizedBox(width: 16),
+
+      ElevatedButton(
+        onPressed: finishRecording,
+        child: const Text('記録終了'),
+      ),
+    ],
+  ),
+],
+
+
+              if (currentStep == AppStep.recording &&
+                  recordStatus == RecordStatus.recording)  ...[
                   const SizedBox(height: 24),
 
-                  TextField(
-                    controller: memoController,
-                    decoration: const InputDecoration(
-                      labelText: 'メモ',
-                      hintText: '例：歩道が狭い、休憩場所、見通しが悪い',
-                      border: OutlineInputBorder(),
-                    ),
-                    maxLines: 2,
+                 TextField(
+                  controller: memoController,
+                  decoration: const InputDecoration(
+                    labelText: 'メモ',
+                    hintText: '例：歩道が狭い、休憩場所、見通しが悪い',
+                    border: OutlineInputBorder(),
+                   ),
+                  maxLines: 2,
                   ),
 
-                  const SizedBox(height: 12),
+               const SizedBox(height: 12),
 
                   ElevatedButton(
-                     onPressed: (currentStep == AppStep.recording && hasStartedCheck)
-                         ? addMemoPoint
-                         : null,
+                    onPressed: isRecording ? addMemoPoint : null,
                     child: const Text('メモを記録する'),
-                  ),
+                   ),
+               ],
 
                   const SizedBox(height: 24),
 
