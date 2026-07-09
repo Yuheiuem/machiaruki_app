@@ -10,6 +10,9 @@ import 'package:geolocator/geolocator.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
+const String appVersion = 'v1.30';  //バージョン表示
+
+
 
 void main() {
   runApp(const MachiarukiApp());
@@ -717,8 +720,22 @@ Future<void> sendCheckRecord() async {
       title: 'まち歩きアプリ',
       home: Scaffold(
         appBar: AppBar(
-          title: const Text('まち歩きアプリ'),
+  title: const Text('まち歩きアプリ'),
+  actions: const [
+    Padding(
+      padding: EdgeInsets.only(right: 12),
+      child: Center(
+        child: Text(
+          appVersion,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+          ),
         ),
+      ),
+    ),
+  ],
+),
 
         bottomNavigationBar: Container(
   padding: const EdgeInsets.all(12),
