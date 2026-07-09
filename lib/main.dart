@@ -52,6 +52,13 @@ class MemoPoint {
   });
 }
 
+enum AppStep {
+  departureCheck,
+  recording,
+  saveRecord,
+  finishCheck,
+}
+
 class _MachiarukiAppState extends State<MachiarukiApp> {
   String statusText = '記録を開始してください';
   String latitudeText = '未取得';
@@ -61,6 +68,8 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
   String checkType = '出発';
   bool hasStartedCheck = false;
   bool hasFinishedCheck = false;
+  AppStep currentStep = AppStep.departureCheck;
+
 
   final String checkAppsScriptUrl =
      'https://script.google.com/macros/s/AKfycbyQNlGg8OTttkZob4rRSmSclN0M4krX3jboT0mk4IZrSOc5C3YEXL-XeqgFUBcx3CQh/exec';
@@ -73,11 +82,6 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
   final String routeMapPageUrl =
     'https://script.google.com/macros/s/AKfycbzi92-RH7XEufG2Rjv5HJsdjj5W0yw6UGFBOa6xb00Gz020GsT_BeLO0HHIUFhOnNg9wA/exec';
   //参加者の歩いたルート表示用
-
-  // 保存方法
-  
-  String saveMethod = 'download';
-
   // 動作モード
   // test: PCテスト用。GPS失敗時にテスト座標を使う
   // production: 実運用。GPS失敗時や精度不良時は記録しない
@@ -240,14 +244,15 @@ String createMemoCsvText() {
     );
   }
 
-  void stopRecording() {
+ void stopRecording() {
     timer?.cancel();
 
-    setState(() {
-      isRecording = false;
-      statusText = '記録を停止しました';
-    });
-  }
+  setState(() {
+    isRecording = false;
+    currentStep = AppStep.saveRecord;
+    statusText = '記録を停止しました。保存/送信用データを作成してください';
+  });
+}
 
   Future<void> addMemoPoint() async {
     final memoText = memoController.text.trim();
@@ -431,6 +436,22 @@ String createMemoCsvText() {
     statusText = 'メモ一覧CSVをダウンロードしました';
   });
 }
+
+void scrollToCheckSection() {
+  final targetContext = checkSectionKey.currentContext;
+
+  if (targetContext == null) {
+    return;
+  }
+
+  Scrollable.ensureVisible(
+    targetContext,
+    duration: const Duration(milliseconds: 500),
+    curve: Curves.easeInOut,
+    alignment: 0.1,
+  );
+}
+
 Future<void> sendToGoogleDrive() async {
   if (geoJsonText.isEmpty) {
     setState(() {
@@ -485,8 +506,11 @@ Future<void> sendToGoogleDrive() async {
     form.submit();
 
     setState(() {
-      statusText = 'Google Driveへ送信しました';
-    });
+      checkType = '終了';
+      currentStep = AppStep.finishCheck;
+      statusText = 'Google Driveへ送信しました。終了確認を送信してください';
+     });
+
 
     await Future.delayed(const Duration(seconds: 5));
   } catch (e) {
@@ -550,16 +574,17 @@ Future<void> sendCheckRecord() async {
     form.submit();
 
     setState(() {
-     if (checkType == '出発') {
+    if (checkType == '出発') {
     hasStartedCheck = true;
     hasFinishedCheck = false;
+    currentStep = AppStep.recording;
+    statusText = '出発確認を送信しました。記録を開始できます';
   }
 
-     if (checkType == '終了') {
+    if (checkType == '終了') {
     hasFinishedCheck = true;
+    statusText = '終了確認を送信しました';
   }
-
-      statusText = '$checkType確認を送信しました';
 });
 
     await Future.delayed(const Duration(seconds: 3));
@@ -570,18 +595,6 @@ Future<void> sendCheckRecord() async {
   } finally {
     form?.remove();
     iframe?.remove();
-  }
-}
-
-void saveRouteRecord() {
-  if (saveMethod == 'download') {
-    downloadGeoJson();
-    return;
-  }
-
-  if (saveMethod == 'googleDrive') {
-    sendToGoogleDrive();
-    return;
   }
 }
 
@@ -640,76 +653,45 @@ void saveRouteRecord() {
 
                   const SizedBox(height: 24),
 
-                  TextField(
-                    readOnly: hasStartedCheck,
-                    decoration: InputDecoration(
-                    labelText: '記録者名',
-                    border: const OutlineInputBorder(),
-                    suffixText: hasStartedCheck ? '変更不可' : null,
-                        ),
-                    onChanged: (value) {
-                      if (!hasStartedCheck) {
-                         recorderName = value;
-                            }
-                        },
-                    ),
+                  if (currentStep == AppStep.departureCheck) ...[
+      TextField(
+          readOnly: hasStartedCheck,
+            decoration: InputDecoration(
+            labelText: '記録者名',
+            border: const OutlineInputBorder(),
+            suffixText: hasStartedCheck ? '変更不可' : null,
+            ),
+     onChanged: (value) {
+      if (!hasStartedCheck) {
+        recorderName = value;
+         }
+       },
+      ),
 
-                  const SizedBox(height: 24),
-
-                  const Text(
-  '出発・終了確認',
-  style: TextStyle(
-    fontSize: 18,
-    fontWeight: FontWeight.bold,
-  ),
-),
-
-const SizedBox(height: 8),
-
-SegmentedButton<String>(
-  segments: const [
-    ButtonSegment<String>(
-      value: '出発',
-      label: Text('出発'),
-    ),
-    ButtonSegment<String>(
-      value: '終了',
-      label: Text('終了'),
-    ),
-  ],
-  selected: {checkType},
-  onSelectionChanged: (Set<String> selected) {
-    setState(() {
-      checkType = selected.first;
-    });
-  },
-),
-
-const SizedBox(height: 8),
-
-ElevatedButton(
-  onPressed: sendCheckRecord,
-  child: const Text('確認を送信'),
-),
-
-if (hasFinishedCheck) ...[
-  const SizedBox(height: 16),
-
-  ElevatedButton(
-    onPressed: () {
-      html.window.open(routeMapPageUrl, '_blank');
-    },
-    child: const Text('みんなの歩いたルートを見る'),
-  ),
-],
-
-const SizedBox(height: 16),
-
-if (!hasStartedCheck) ...[
   const SizedBox(height: 24),
 
   const Text(
-    '出発確認を送信すると、記録機能が表示されます',
+    '出発確認',
+    style: TextStyle(
+      fontSize: 18,
+      fontWeight: FontWeight.bold,
+    ),
+  ),
+
+  const SizedBox(height: 8),
+
+  ElevatedButton(
+    onPressed: () {
+      checkType = '出発';
+      sendCheckRecord();
+    },
+    child: const Text('出発確認を送信'),
+  ),
+
+  const SizedBox(height: 24),
+
+  const Text(
+    '出発確認を送信すると、記録画面に進みます',
     textAlign: TextAlign.center,
     style: TextStyle(
       fontSize: 14,
@@ -719,7 +701,71 @@ if (!hasStartedCheck) ...[
   ),
 ],
 
-if (hasStartedCheck) ...[       //ここから非表示/表示切替
+if (currentStep == AppStep.finishCheck) ...[
+  const Text(
+    '終了確認',
+    style: TextStyle(
+      fontSize: 18,
+      fontWeight: FontWeight.bold,
+    ),
+  ),
+
+  const SizedBox(height: 8),
+
+  ElevatedButton(
+    onPressed: hasFinishedCheck
+        ? null
+        : () {
+            checkType = '終了';
+            sendCheckRecord();
+          },
+    child: const Text('終了確認を送信'),
+  ),
+
+  if (hasFinishedCheck) ...[
+    const SizedBox(height: 16),
+
+    ElevatedButton(
+    onPressed: () {
+      html.window.open(routeMapPageUrl, '_blank');
+    },
+    child: const Text('みんなの歩いたルートを見る'),
+    ),
+
+   const SizedBox(height: 24),
+
+   const Text(
+    '必要な場合のみ端末に保存してください',
+    style: TextStyle(
+      fontSize: 16,
+      fontWeight: FontWeight.bold,
+        ),
+      ),
+
+  const SizedBox(height: 8),
+
+  ElevatedButton(
+    onPressed: geoJsonText.isEmpty ? null : downloadGeoJson,
+    child: const Text('ルート記録を端末保存'),
+     ),
+
+  const SizedBox(height: 8),
+
+  ElevatedButton(
+    onPressed: downloadMemoCsv,
+    child: const Text('メモ一覧CSVを端末保存'),
+     ),
+   ],
+],
+
+
+const SizedBox(height: 8),
+
+
+
+
+if (currentStep == AppStep.recording ||
+    currentStep == AppStep.saveRecord) ...[       //ここから非表示/表示切替
 
                   const Text(
                     '動作モード',
@@ -740,13 +786,14 @@ if (hasStartedCheck) ...[       //ここから非表示/表示切替
                       ),
                     ],
                     selected: {operationMode},
-                    onSelectionChanged: isRecording
-                        ? null
-                        : (Set<String> selected) {
-                            setState(() {
-                              operationMode = selected.first;
-                            });
-                          },
+                    onSelectionChanged:
+                        (currentStep == AppStep.recording && !isRecording)
+                            ? (Set<String> selected) {
+                                setState(() {
+                                  operationMode = selected.first;
+                                });
+                              }
+                            : null,
                   ),
 
                   const SizedBox(height: 12),
@@ -765,7 +812,9 @@ if (hasStartedCheck) ...[       //ここから非表示/表示切替
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                   ElevatedButton(
-                    onPressed: (!hasStartedCheck || isRecording) ? null : startRecording,
+                    onPressed: (currentStep == AppStep.recording && !isRecording)
+                        ? startRecording
+                        : null,
                     child: const Text('記録開始'),
                       ),
                       const SizedBox(width: 16),
@@ -791,67 +840,49 @@ if (hasStartedCheck) ...[       //ここから非表示/表示切替
                   const SizedBox(height: 12),
 
                   ElevatedButton(
-                     onPressed: hasStartedCheck ? addMemoPoint : null,
+                     onPressed: (currentStep == AppStep.recording && hasStartedCheck)
+                         ? addMemoPoint
+                         : null,
                     child: const Text('メモを記録する'),
                   ),
 
                   const SizedBox(height: 24),
 
                  ElevatedButton(
-                    onPressed: (!hasStartedCheck || isRecording) ? null : createGeoJson,
+                    onPressed: (currentStep == AppStep.saveRecord && !isRecording)
+                   ? createGeoJson
+                        : null,
                     child: const Text('保存/送信用ルート・メモ記録作成'),
-                   ),
+                  ),
 
-                  if (geoJsonText.isNotEmpty) ...[
+                  if (currentStep == AppStep.saveRecord && geoJsonText.isNotEmpty) ...[
                     const SizedBox(height: 24),
 
                     const Text(
-                      '保存方法',
-                      style: TextStyle(fontSize: 16),
+                      '記録をGoogle Driveへ送信',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
 
                     const SizedBox(height: 8),
 
-                    SegmentedButton<String>(
-                      segments: const [
-                        ButtonSegment<String>(
-                          value: 'download',
-                          label: Text('端末保存'),
-                        ),
-                        ButtonSegment<String>(
-                          value: 'googleDrive',
-                          label: Text('Drive送信'),
-                        ),
-                      ],
-                      selected: {saveMethod},
-                      onSelectionChanged: (Set<String> selected) {
-                        setState(() {
-                          saveMethod = selected.first;
-                        });
-                      },
+                    const Text(
+                      'ルートとメモを管理用フォルダへ送信します',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 13),
                     ),
 
                     const SizedBox(height: 12),
 
-                    if (saveMethod == 'download') ...[
-                      ElevatedButton(
-                        onPressed: (!hasStartedCheck || isRecording) ? null : saveRouteRecord,
-                        child: const Text('ルート記録保存'),
-                      ),
-
-                      const SizedBox(height: 8),
-
-                      ElevatedButton(
-                        onPressed: (!hasStartedCheck || isRecording) ? null : downloadMemoCsv,
-                        child: const Text('メモ一覧CSV保存'),
-                      ),
-                    ] else ...[
-                      ElevatedButton(
-                        onPressed: isRecording ? null : saveRouteRecord,
-                        child: const Text('Google Driveへ送信'),
-                      ),
-                    ],
+                    ElevatedButton(
+                      onPressed: sendToGoogleDrive,
+                      child: const Text('Google Driveへ送信'),
+                    ),
                   ],
+
+                  
 
                   const SizedBox(height: 32),
 
@@ -888,7 +919,10 @@ const Text(
 const SizedBox(height: 8),
 
 ElevatedButton(
-  onPressed: hasStartedCheck ? updateMapPreview : null,
+  onPressed: (currentStep == AppStep.recording ||
+          currentStep == AppStep.saveRecord)
+      ? updateMapPreview
+      : null,
   child: const Text('地図更新'),
 ),
 
