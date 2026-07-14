@@ -86,15 +86,15 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
 
 
   final String checkAppsScriptUrl =
-     'https://script.google.com/macros/s/AKfycbyQNlGg8OTttkZob4rRSmSclN0M4krX3jboT0mk4IZrSOc5C3YEXL-XeqgFUBcx3CQh/exec';
+     'https://script.google.com/macros/s/AKfycbwsXNA0zpEEbzFnMRLt2kIYmaMaaKoDs50lllgDevq64EInOObKtAKWdFa5yI1TNSqm/exec';
   final String checkKey = 'machiaruki-check-key';
   //出発終了確認
   final String googleAppsScriptUrl = 
-     'https://script.google.com/macros/s/AKfycbzgUobwgg5klknNQXKx_8wtXxJ2GoPsmwavZL4VFNobq6Lty0WdYmVkkW4gxMr2RgL60w/exec';
+     'https://script.google.com/macros/s/AKfycbzE_xa8iedkhKhLyF_fvEsDH7apdwEZwmLqD8KIE8AjZUuO2FfliBAOMditmEapXTVW/exec';
   final String uploadKey = 'machiaruki-test-key';
   //GoosleDrive送信用
   final String routeMapPageUrl =
-    'https://script.google.com/macros/s/AKfycbzi92-RH7XEufG2Rjv5HJsdjj5W0yw6UGFBOa6xb00Gz020GsT_BeLO0HHIUFhOnNg9wA/exec';
+    'https://script.google.com/macros/s/AKfycbzPiXAnBTe5yej4CMHdSn-BAW8oSaD0rX45PLsTvKjEvWUYFibcjl8DgH13tbPHNSIN/exec';
   //参加者の歩いたルート表示用
   // 動作モード
   // test: PCテスト用。GPS失敗時にテスト座標を使う
