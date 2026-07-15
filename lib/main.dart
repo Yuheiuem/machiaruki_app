@@ -94,7 +94,7 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
   final String uploadKey = 'machiaruki-test-key';
   //GoosleDrive送信用
   final String routeMapPageUrl =
-    'https://script.google.com/macros/s/AKfycbzOaghl46ADKi3Ki-7KG36xSCFEOV-r0bZNj7MTvVrEGjV6t6vs6oLvs7KgCA4gSUhK/exec';
+    'https://yuheiuem.github.io/machiaruki_app/route_map/';
   //参加者の歩いたルート表示用
   // 動作モード
   // test: PCテスト用。GPS失敗時にテスト座標を使う
