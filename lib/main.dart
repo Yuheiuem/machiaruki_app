@@ -10,7 +10,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
-const String appVersion = 'v1.32';  //バージョン表示
+const String appVersion = 'v1.40';  //バージョン表示
 
 
 

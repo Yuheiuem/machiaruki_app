@@ -83921,7 +83921,7 @@ s.x="\u7d42\u4e86"
 s.rb()},
 $S:0}
 A.aop.prototype={
-$0(){var s=window.open("https://script.google.com/macros/s/AKfycbzOaghl46ADKi3Ki-7KG36xSCFEOV-r0bZNj7MTvVrEGjV6t6vs6oLvs7KgCA4gSUhK/exec","_blank")
+$0(){var s=window.open("https://yuheiuem.github.io/machiaruki_app/route_map/","_blank")
 A.aQi(s)},
 $S:0}
 A.aoq.prototype={
