@@ -90,7 +90,7 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
   final String checkKey = 'machiaruki-check-key';
   //出発終了確認
   final String googleAppsScriptUrl = 
-     'https://script.google.com/macros/s/AKfycbzE_xa8iedkhKhLyF_fvEsDH7apdwEZwmLqD8KIE8AjZUuO2FfliBAOMditmEapXTVW/exec';
+     'https://script.google.com/macros/s/AKfycbzoWwGug2qRTQ7VzLX4a3ynqcj7sOZzHcUYuMowvOGXRYLP-gvu_4ZMEMqJAOROVP07/exec';
   final String uploadKey = 'machiaruki-test-key';
   //GoosleDrive送信用
   final String routeMapPageUrl =
