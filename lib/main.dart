@@ -99,7 +99,7 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
   // 動作モード
   // test: PCテスト用。GPS失敗時にテスト座標を使う
   // production: 実運用。GPS失敗時や精度不良時は記録しない
-  String operationMode = 'test';
+  String operationMode = 'production';
 
   bool isRecording = false;
   int testCount = 0;
@@ -1034,46 +1034,74 @@ const SizedBox(height: 8),
 if (currentStep == AppStep.recording ||
     currentStep == AppStep.saveRecord) ...[       //ここから非表示/表示切替
 
-                  const Text(
-                    '動作モード',
-                    style: TextStyle(fontSize: 16),
-                  ),
+                  Align(
+  alignment: Alignment.centerRight,
+  child: Column(
+    crossAxisAlignment: CrossAxisAlignment.end,
+    children: [
+      Text(
+        operationMode == 'production'
+            ? '本番調査用'
+            : 'PC実験用',
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          color: operationMode == 'production'
+              ? Colors.grey
+              : Colors.red,
+        ),
+      ),
 
-                  const SizedBox(height: 8),
+      const SizedBox(height: 4),
 
-                  SegmentedButton<String>(
-                    segments: [
-                      ButtonSegment<String>(
-                        value: 'test',
-                        label: const Text('PCテスト用'),
-                        enabled: recordStatus == RecordStatus.notStarted,
-                       ),
-                      ButtonSegment<String>(
-                         value: 'production',
-                         label: const Text('実運用'),
-                         enabled: recordStatus == RecordStatus.notStarted,
-                       ),
-                     ],
-                    selected: {operationMode},
-                    onSelectionChanged: recordStatus == RecordStatus.notStarted
-                      ? (Set<String> selected) {
-                          setState(() {
-                           operationMode = selected.first;
-                            });
-                         }
-                   : null,
+      OutlinedButton.icon(
+        onPressed: recordStatus == RecordStatus.notStarted
+            ? () {
+                setState(() {
+                  if (operationMode == 'production') {
+                    operationMode = 'test';
+                    statusText = 'PC実験用に切り替えました';
+                  } else {
+                    operationMode = 'production';
+                    statusText = '本番調査用に戻しました';
+                  }
+                });
+              }
+            : null,
+        icon: const Icon(
+          Icons.science_outlined,
+          size: 16,
+        ),
+        label: Text(
+          operationMode == 'production'
+              ? 'PC実験用'
+              : '本番調査用に戻す',
+          style: const TextStyle(fontSize: 12),
+        ),
+      ),
+    ],
+  ),
 ),
-                  const SizedBox(height: 12),
 
-                  Text(
-                    operationMode == 'test'
-                        ? 'PCテスト用：GPS取得に失敗した場合、テスト座標を記録します'
-                        : '実運用：GPS取得失敗時や精度25m超の点は記録しません',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 13),
-                  ),
+const SizedBox(height: 8),
 
-                  const SizedBox(height: 24),
+Text(
+  operationMode == 'production'
+      ? '通常はこのまま使用してください。GPS取得失敗時や精度25m超の点は記録しません。'
+      : 'PC実験用です。GPS取得に失敗した場合、テスト座標を記録します。',
+  textAlign: TextAlign.center,
+  style: TextStyle(
+    fontSize: 13,
+    fontWeight: operationMode == 'test'
+        ? FontWeight.bold
+        : FontWeight.normal,
+    color: operationMode == 'test'
+        ? Colors.red
+        : Colors.black87,
+  ),
+),
+
+const SizedBox(height: 24),
 
                   if (recordStatus != RecordStatus.paused) ...[
   Row(
