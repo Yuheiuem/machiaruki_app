@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>みんなの歩いたルート</title>
+
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
+
+  <style>
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f8f4fb;
+    }
+
+    .page {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .header {
+      padding: 14px 16px 10px;
+      background: #eee6f7;
+      border-bottom: 1px solid #ddd3e8;
+    }
+
+    .title {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 700;
+      text-align: center;
+    }
+
+    .subtitle {
+      margin-top: 6px;
+      font-size: 13px;
+      text-align: center;
+      color: #555;
+    }
+
+    .info {
+      padding: 8px 12px;
+      font-size: 13px;
+      text-align: center;
+      background: #ffffff;
+      border-bottom: 1px solid #e0e0e0;
+    }
+
+    #map {
+      flex: 1;
+      min-height: 420px;
+    }
+
+    .footer {
+      padding: 5px 8px;
+      font-size: 11px;
+      color: #666;
+      text-align: right;
+      background: rgba(255, 255, 255, 0.92);
+      border-top: 1px solid #e0e0e0;
+    }
+
+    .error {
+      color: #c62828;
+      font-weight: 700;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="page">
+    <div class="header">
+      <h1 class="title">みんなの歩いたルート</h1>
+      <div class="subtitle">参加者のルートを匿名で重ねて表示しています</div>
+    </div>
+
+    <div class="info" id="info">
+      ルートを読み込み中です...
+    </div>
+
+    <div id="map"></div>
+
+    <div class="footer">
+      出典：国土地理院（地理院タイル）
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script>
+    const dataUrl = '../route_data/routes.json';
+    const refreshIntervalMs = 15000;
+
+    const routeColors = [
+      '#e53935',
+      '#d81b60',
+      '#8e24aa',
+      '#5e35b1',
+      '#3949ab',
+      '#1e88e5',
+      '#039be5',
+      '#00897b',
+      '#43a047',
+      '#7cb342',
+      '#f4511e',
+      '#fb8c00',
+      '#6d4c41',
+      '#546e7a'
+    ];
+
+    const map = L.map('map', {
+      zoomControl: true
+    });
+
+    L.tileLayer(
+      'https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',
+      {
+        maxZoom: 18,
+        attribution: '地理院タイル'
+      }
+    ).addTo(map);
+
+    const routeLayer = L.layerGroup().addTo(map);
+
+    let hasSetInitialView = false;
+    let lastRouteCount = -1;
+
+    function getRouteColor(index) {
+      return routeColors[index % routeColors.length];
+    }
+
+    function isValidPoint(point) {
+      return (
+        Array.isArray(point) &&
+        point.length >= 2 &&
+        Number.isFinite(Number(point[0])) &&
+        Number.isFinite(Number(point[1]))
+      );
+    }
+
+    function normalizeRoute(route) {
+      if (!Array.isArray(route)) {
+        return [];
+      }
+
+      return route
+        .filter(isValidPoint)
+        .map(function(point) {
+          return [Number(point[0]), Number(point[1])];
+        });
+    }
+
+    async function loadRoutes() {
+      const response = await fetch(dataUrl + '?t=' + Date.now(), {
+        cache: 'no-store'
+      });
+
+      if (!response.ok) {
+        throw new Error('routes.json を読み込めませんでした');
+      }
+
+      return await response.json();
+    }
+
+    function drawRoutes(routeResult) {
+      const routes = Array.isArray(routeResult.routes)
+        ? routeResult.routes
+        : [];
+
+      routeLayer.clearLayers();
+
+      const allPoints = [];
+      let visibleRouteCount = 0;
+
+      routes.forEach(function(rawRoute, index) {
+        const route = normalizeRoute(rawRoute);
+
+        if (route.length < 2) {
+          return;
+        }
+
+        visibleRouteCount++;
+
+        L.polyline(route, {
+          color: getRouteColor(index),
+          weight: 4,
+          opacity: 0.85,
+          lineCap: 'round',
+          lineJoin: 'round'
+        }).addTo(routeLayer);
+
+        route.forEach(function(point) {
+          allPoints.push(point);
+        });
+      });
+
+      if (allPoints.length === 0) {
+        map.setView([35.690921, 139.700258], 15);
+
+        document.getElementById('info').textContent =
+          '表示できるルートはまだありません';
+
+        lastRouteCount = 0;
+        return;
+      }
+
+      if (!hasSetInitialView || visibleRouteCount !== lastRouteCount) {
+        const bounds = L.latLngBounds(allPoints);
+        map.fitBounds(bounds, {
+          padding: [30, 30]
+        });
+        hasSetInitialView = true;
+      }
+
+      lastRouteCount = visibleRouteCount;
+
+      document.getElementById('info').textContent =
+        '表示中のルート数：' +
+        visibleRouteCount +
+        '件 / 更新時刻：' +
+        (routeResult.generatedAt || '不明');
+    }
+
+    async function refreshRoutes() {
+      try {
+        const routeResult = await loadRoutes();
+        drawRoutes(routeResult);
+      } catch (error) {
+        document.getElementById('info').innerHTML =
+          '<span class="error">ルートデータを読み込めませんでした</span>';
+      }
+    }
+
+    refreshRoutes();
+
+    setInterval(function() {
+      refreshRoutes();
+    }, refreshIntervalMs);
+  </script>
+</body>
+</html>
