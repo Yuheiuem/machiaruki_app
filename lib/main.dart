@@ -107,7 +107,7 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
   final String checkKey = 'machiaruki-check-key';
   //出発終了確認
   final String googleAppsScriptUrl = 
-     'https://script.google.com/macros/s/AKfycbwtjueAaeBFgXdAmO4xfHOOIbyNMkN7dtxvzABpEjcSJfkIwLfciwAp3SMclAlqT57p/exec';
+     'https://script.google.com/macros/s/AKfycbxsUODDG7nWFkl7o-LDMMEZG1mG20JXxH94PnJN16fWZGNhxuH984NOm499tE6GZBr4/exec';
   final String uploadKey = 'machiaruki-test-key';
   //GoosleDrive送信用
   final String routeMapPageUrl =
@@ -266,24 +266,133 @@ String formatDurationText(Duration duration) {
   return '"$escaped"';
 }
 
-String createMemoCsvText() {
-  final lines = <String>[];
+String createMemoColumnName(Map<String, String> field) {
+  final fieldId = field['fieldId'] ?? '';
+  final fieldLabel = field['fieldLabel'] ?? fieldId;
 
-  lines.add('memo,time,latitude,longitude');
+  if (fieldId.isEmpty) {
+    return fieldLabel;
+  }
+
+  return '${fieldId}__$fieldLabel';
+}
+
+List<Map<String, String>> getMemoFieldColumnsForCsv() {
+  final columns = <Map<String, String>>[];
+  final seenFieldIds = <String>{};
+
+  for (final category in memoFormCategories) {
+    final rawFields = category['fields'];
+
+    if (rawFields is! List) {
+      continue;
+    }
+
+    for (final rawField in rawFields) {
+      if (rawField is! Map) {
+        continue;
+      }
+
+      final field = Map<String, dynamic>.from(rawField);
+
+      final fieldId = field['id']?.toString() ?? '';
+
+      if (fieldId.isEmpty || seenFieldIds.contains(fieldId)) {
+        continue;
+      }
+
+      seenFieldIds.add(fieldId);
+
+      columns.add({
+        'fieldId': fieldId,
+        'fieldLabel': field['label']?.toString() ?? fieldId,
+      });
+    }
+  }
+
+  // 念のため、既に記録済みのメモにだけ存在する項目も拾う
+  for (final memoPoint in memoPoints) {
+    for (final answer in memoPoint.answers) {
+      final fieldId = answer['fieldId'] ?? '';
+
+      if (fieldId.isEmpty || seenFieldIds.contains(fieldId)) {
+        continue;
+      }
+
+      seenFieldIds.add(fieldId);
+
+      columns.add({
+        'fieldId': fieldId,
+        'fieldLabel': answer['fieldLabel'] ?? fieldId,
+      });
+    }
+  }
+
+  return columns;
+}
+
+String createMemoCsvText() {
+  final fieldColumns = getMemoFieldColumnsForCsv();
+
+  final headerColumns = [
+    'memo_id',
+    'recorder_name',
+    'memo_type',
+    'memo_type_label',
+    ...fieldColumns.map(createMemoColumnName),
+    'recorded_at',
+    'latitude',
+    'longitude',
+    'operation_mode',
+    'is_test_data',
+    'server_saved_at',
+    'form_version',
+  ];
+
+  final lines = <String>[
+    headerColumns.map(escapeCsvValue).join(','),
+  ];
+
+  final safeRecorderName =
+      recorderName.trim().isEmpty ? 'unknown' : recorderName.trim();
 
   for (final memoPoint in memoPoints) {
-    lines.add([
-      escapeCsvValue(memoPoint.memo),
-      escapeCsvValue(formatDateTime(memoPoint.time)),
+    final answerMap = <String, String>{};
+
+    for (final answer in memoPoint.answers) {
+      final fieldId = answer['fieldId'] ?? '';
+
+      if (fieldId.isNotEmpty) {
+        answerMap[fieldId] = answer['answer'] ?? '';
+      }
+    }
+
+    final rowColumns = [
+      memoPoint.memoId,
+      safeRecorderName,
+      memoPoint.memoType,
+      memoPoint.memoTypeLabel,
+      ...fieldColumns.map((field) {
+        final fieldId = field['fieldId'] ?? '';
+        return answerMap[fieldId] ?? '';
+      }),
+      formatDateTime(memoPoint.time),
       memoPoint.latitude.toStringAsFixed(6),
       memoPoint.longitude.toStringAsFixed(6),
-    ].join(','));
+      operationMode,
+      memoPoint.isTestData.toString(),
+      '',
+      memoPoint.formVersion,
+    ];
+
+    lines.add(rowColumns.map(escapeCsvValue).join(','));
   }
 
   return lines.join('\n');
 }
 
-  Future<TrackPoint?> getCurrentTrackPoint() async {
+
+Future<TrackPoint?> getCurrentTrackPoint() async {
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
 
@@ -511,14 +620,15 @@ void finishRecording() {
   );
 
   setState(() {
-    memoPoints.add(memoPoint);
+  memoPoints.add(memoPoint);
 
-    latitudeText = roundTo6(point.latitude).toString();
-    longitudeText = roundTo6(point.longitude).toString();
+  latitudeText = roundTo6(point.latitude).toString();
+  longitudeText = roundTo6(point.longitude).toString();
 
-    memoAnswers.clear();
-    statusText = 'メモ地点を記録し、Google Driveへ送信しました';
-  });
+  memoAnswers.clear();
+  memoFormResetCount++;
+  statusText = 'メモ地点を記録し、Google Driveへ送信しました';
+});
 
   sendMemoToGoogleDrive(memoPoint);
 }
@@ -734,6 +844,7 @@ Future<void> sendMemoToGoogleDrive(MemoPoint memoPoint) async {
     addField('memoTypeLabel', memoPoint.memoTypeLabel);
     addField('formVersion', memoPoint.formVersion);
     addField('answersJson', jsonEncode(memoPoint.answers));
+    addField('fieldColumnsJson', jsonEncode(getMemoFieldColumnsForCsv()));
     addField('recordedAt', formatDateTime(memoPoint.time));
     addField('latitude', memoPoint.latitude.toStringAsFixed(6));
     addField('longitude', memoPoint.longitude.toStringAsFixed(6));
@@ -777,6 +888,8 @@ Future<void> sendToGoogleDrive() async {
     final frameName =
         'upload_iframe_${DateTime.now().microsecondsSinceEpoch}';
 
+    final csvText = memoPoints.isEmpty ? '' : createMemoCsvText();
+
     iframe = html.IFrameElement()
       ..name = frameName
       ..style.display = 'none';
@@ -801,6 +914,7 @@ Future<void> sendToGoogleDrive() async {
     addField('uploadKey', uploadKey);
     addField('recorderName', recorder);
     addField('geoJsonText', geoJsonText);
+    addField('csvText', csvText);
 
     html.document.body!.append(form);
 
@@ -980,7 +1094,7 @@ Widget buildStructuredMemoForm() {
           return Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: DropdownButtonFormField<String>(
-              key: ValueKey('$selectedMemoType-$fieldId-$memoFormResetCount'),
+              key: ValueKey('text-$selectedMemoType-$fieldId-$memoFormResetCount'),
               initialValue: dropdownValue,
               decoration: InputDecoration(
                 labelText: required ? '$fieldLabel *' : fieldLabel,
@@ -1345,7 +1459,7 @@ if (currentStep == AppStep.finishCheck) ...[
   const SizedBox(height: 8),
 
   ElevatedButton(
-    onPressed: null, //無効化中
+    onPressed: memoPoints.isEmpty ? null : downloadMemoCsv, 
     child: const Text('メモ一覧CSVを端末保存'),
   ),
  ],
