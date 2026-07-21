@@ -10,7 +10,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
-const String appVersion = 'v1.40';  //バージョン表示
+const String appVersion = 'v1.50';  //バージョン表示
 
 
 
@@ -46,12 +46,23 @@ class MemoPoint {
   final String memo;
   final bool isTestData;
 
+  final String memoId;
+  final String memoType;
+  final String memoTypeLabel;
+  final String formVersion;
+  final List<Map<String, String>> answers;
+
   MemoPoint({
     required this.time,
     required this.latitude,
     required this.longitude,
     required this.memo,
     required this.isTestData,
+    required this.memoId,
+    required this.memoType,
+    required this.memoTypeLabel,
+    required this.formVersion,
+    required this.answers,
   });
 }
 
@@ -83,6 +94,12 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
   DateTime? pausedAt;
   String pausedElapsedText = '0秒';
   Timer? pauseTimer;
+  String memoFormVersion = 'unknown';
+  List<Map<String, dynamic>> memoFormCategories = [];
+  String selectedMemoType = '';
+  Map<String, String> memoAnswers = {};
+  int memoFormResetCount = 0;
+  bool isMemoFormConfigLoaded = false;
 
 
   final String checkAppsScriptUrl =
@@ -90,7 +107,7 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
   final String checkKey = 'machiaruki-check-key';
   //出発終了確認
   final String googleAppsScriptUrl = 
-     'https://script.google.com/macros/s/AKfycbzoWwGug2qRTQ7VzLX4a3ynqcj7sOZzHcUYuMowvOGXRYLP-gvu_4ZMEMqJAOROVP07/exec';
+     'https://script.google.com/macros/s/AKfycbwtjueAaeBFgXdAmO4xfHOOIbyNMkN7dtxvzABpEjcSJfkIwLfciwAp3SMclAlqT57p/exec';
   final String uploadKey = 'machiaruki-test-key';
   //GoosleDrive送信用
   final String routeMapPageUrl =
@@ -121,19 +138,101 @@ class _MachiarukiAppState extends State<MachiarukiApp> {
   }
 
   String formatDateTime(DateTime dateTime) {
-  String twoDigits(int n) {
-    return n.toString().padLeft(2, '0');
+    String twoDigits(int n) {
+      return n.toString().padLeft(2, '0');
+    }
+
+    final year = dateTime.year.toString();
+    final month = twoDigits(dateTime.month);
+    final day = twoDigits(dateTime.day);
+    final hour = twoDigits(dateTime.hour);
+    final minute = twoDigits(dateTime.minute);
+    final second = twoDigits(dateTime.second);
+
+    return '$year-$month-$day $hour:$minute:$second';
   }
 
-  final year = dateTime.year.toString();
-  final month = twoDigits(dateTime.month);
-  final day = twoDigits(dateTime.day);
-  final hour = twoDigits(dateTime.hour);
-  final minute = twoDigits(dateTime.minute);
-  final second = twoDigits(dateTime.second);
+  Future<void> loadMemoFormConfig() async {
+    try {
+      final configUrl = Uri.base.resolve('memo_form_config.json').toString();
 
-  return '$year-$month-$day $hour:$minute:$second';
-}
+      final text = await html.HttpRequest.getString(
+        '$configUrl?t=${DateTime.now().millisecondsSinceEpoch}',
+      );
+
+      final decoded = jsonDecode(text) as Map<String, dynamic>;
+
+      final rawCategories = decoded['categories'];
+
+      if (rawCategories is! List) {
+        setState(() {
+          isMemoFormConfigLoaded = false;
+          statusText = 'メモ項目設定を読み込めませんでした';
+        });
+        return;
+      }
+
+      final categories = rawCategories
+          .whereType<Map>()
+          .map((category) => Map<String, dynamic>.from(category))
+          .toList();
+
+      if (categories.isEmpty) {
+        setState(() {
+          isMemoFormConfigLoaded = false;
+          statusText = 'メモ項目設定を読み込めませんでした';
+        });
+        return;
+      }
+
+      setState(() {
+        memoFormVersion = decoded['version']?.toString() ?? 'unknown';
+        memoFormCategories = categories;
+        selectedMemoType = categories.first['id'].toString();
+        memoAnswers.clear();
+        memoFormResetCount++;
+        isMemoFormConfigLoaded = true;
+      });
+    } catch (e) {
+      setState(() {
+        isMemoFormConfigLoaded = false;
+        statusText = 'メモ項目設定の読み込みに失敗しました';
+      });
+    }
+  }
+
+  Map<String, dynamic>? getSelectedMemoCategory() {
+    for (final category in memoFormCategories) {
+      if (category['id'] == selectedMemoType) {
+        return category;
+      }
+    }
+
+    if (memoFormCategories.isNotEmpty) {
+      return memoFormCategories.first;
+    }
+
+    return null;
+  }
+
+  List<Map<String, dynamic>> getSelectedMemoFields() {
+    final category = getSelectedMemoCategory();
+
+    if (category == null) {
+      return [];
+    }
+
+    final rawFields = category['fields'];
+
+    if (rawFields is! List) {
+      return [];
+    }
+
+    return rawFields
+        .whereType<Map>()
+        .map((field) => Map<String, dynamic>.from(field))
+        .toList();
+  }
 
 String formatClockTime(DateTime dateTime) {
   String twoDigits(int n) {
@@ -338,42 +437,91 @@ void finishRecording() {
 }
 
   Future<void> addMemoPoint() async {
-    final memoText = memoController.text.trim();
+  final selectedCategory = getSelectedMemoCategory();
+  final fields = getSelectedMemoFields();
 
-    if (memoText.isEmpty) {
-      setState(() {
-        statusText = 'メモを入力してください';
-      });
-      return;
-    }
-
-    TrackPoint? point = await getCurrentTrackPoint();
-
-    if (point == null) {
-      setState(() {
-        statusText = '位置情報を取得できなかったため、メモを記録できませんでした';
-      });
-      return;
-    }
-
+  if (selectedCategory == null || fields.isEmpty) {
     setState(() {
-      memoPoints.add(
-        MemoPoint(
-          time: DateTime.now(),
-          latitude: point.latitude,
-          longitude: point.longitude,
-          memo: memoText,
-          isTestData: point.isTestData,
-        ),
-      );
-
-      latitudeText = roundTo6(point.latitude).toString();
-      longitudeText = roundTo6(point.longitude).toString();
-
-      memoController.clear();
-      statusText = 'メモ地点を記録しました';
+      statusText = 'メモ項目設定を読み込めていません';
     });
+    return;
   }
+
+  final memoType = selectedCategory['id'].toString();
+  final memoTypeLabel = selectedCategory['label'].toString();
+
+  final answers = <Map<String, String>>[];
+
+  for (final field in fields) {
+    final fieldId = field['id'].toString();
+    final fieldLabel = field['label'].toString();
+    final required = field['required'] == true;
+    final answer = (memoAnswers[fieldId] ?? '').trim();
+
+    if (required && answer.isEmpty) {
+      setState(() {
+        statusText = '$fieldLabel を入力してください';
+      });
+      return;
+    }
+
+    if (answer.isNotEmpty) {
+      answers.add({
+        'fieldId': fieldId,
+        'fieldLabel': fieldLabel,
+        'answer': answer,
+      });
+    }
+  }
+
+  if (answers.isEmpty) {
+    setState(() {
+      statusText = 'メモ内容を入力してください';
+    });
+    return;
+  }
+
+  TrackPoint? point = await getCurrentTrackPoint();
+
+  if (point == null) {
+    setState(() {
+      statusText = '位置情報を取得できなかったため、メモを記録できませんでした';
+    });
+    return;
+  }
+
+  final now = DateTime.now();
+  final memoId = 'memo_${now.microsecondsSinceEpoch}';
+
+  final summaryText = '$memoTypeLabel：${answers.map((answer) {
+    return '${answer['fieldLabel']}=${answer['answer']}';
+  }).join(' / ')}';
+
+  final memoPoint = MemoPoint(
+    time: now,
+    latitude: point.latitude,
+    longitude: point.longitude,
+    memo: summaryText,
+    isTestData: point.isTestData,
+    memoId: memoId,
+    memoType: memoType,
+    memoTypeLabel: memoTypeLabel,
+    formVersion: memoFormVersion,
+    answers: answers,
+  );
+
+  setState(() {
+    memoPoints.add(memoPoint);
+
+    latitudeText = roundTo6(point.latitude).toString();
+    longitudeText = roundTo6(point.longitude).toString();
+
+    memoAnswers.clear();
+    statusText = 'メモ地点を記録し、Google Driveへ送信しました';
+  });
+
+  sendMemoToGoogleDrive(memoPoint);
+}
  
   void updateMapPreview() {
   setState(() {
@@ -413,7 +561,8 @@ void startPauseTimer() {
   void createGeoJson() {
     if (trackPoints.length < 2) {
       setState(() {
-        geoJsonText = 'ルート記録を作るには2点以上の記録が必要です';
+        geoJsonText = '';
+        statusText = 'ルート記録を作るには2点以上の記録が必要です';
       });
       return;
     }
@@ -545,6 +694,66 @@ void startPauseTimer() {
   });
 }
 
+Future<void> sendMemoToGoogleDrive(MemoPoint memoPoint) async {
+  html.IFrameElement? iframe;
+  html.FormElement? form;
+
+  try {
+    final recorder =
+        recorderName.trim().isEmpty ? 'unknown' : recorderName.trim();
+
+    final frameName =
+        'memo_upload_iframe_${DateTime.now().microsecondsSinceEpoch}';
+
+    iframe = html.IFrameElement()
+      ..name = frameName
+      ..style.display = 'none';
+
+    html.document.body!.append(iframe);
+
+    form = html.FormElement()
+      ..method = 'POST'
+      ..action = googleAppsScriptUrl
+      ..target = frameName
+      ..style.display = 'none';
+
+    void addField(String fieldName, String value) {
+      final textarea = html.TextAreaElement()
+        ..name = fieldName
+        ..value = value;
+
+      textarea.style.display = 'none';
+      form!.append(textarea);
+    }
+
+    addField('uploadKey', uploadKey);
+    addField('uploadType', 'memo');
+    addField('recorderName', recorder);
+    addField('memoId', memoPoint.memoId);
+    addField('memoType', memoPoint.memoType);
+    addField('memoTypeLabel', memoPoint.memoTypeLabel);
+    addField('formVersion', memoPoint.formVersion);
+    addField('answersJson', jsonEncode(memoPoint.answers));
+    addField('recordedAt', formatDateTime(memoPoint.time));
+    addField('latitude', memoPoint.latitude.toStringAsFixed(6));
+    addField('longitude', memoPoint.longitude.toStringAsFixed(6));
+    addField('operationMode', operationMode);
+    addField('isTestData', memoPoint.isTestData.toString());
+
+    html.document.body!.append(form);
+
+    form.submit();
+
+    await Future.delayed(const Duration(seconds: 3));
+  } catch (e) {
+    setState(() {
+      statusText = 'メモ送信に失敗しました。もう一度送信してください';
+    });
+  } finally {
+    form?.remove();
+    iframe?.remove();
+  }
+}
 
 Future<void> sendToGoogleDrive() async {
   if (geoJsonText.isEmpty) {
@@ -562,7 +771,6 @@ Future<void> sendToGoogleDrive() async {
   html.FormElement? form;
 
   try {
-    final csvText = createMemoCsvText();
     final recorder =
         recorderName.trim().isEmpty ? 'unknown' : recorderName.trim();
 
@@ -593,7 +801,6 @@ Future<void> sendToGoogleDrive() async {
     addField('uploadKey', uploadKey);
     addField('recorderName', recorder);
     addField('geoJsonText', geoJsonText);
-    addField('csvText', csvText);
 
     html.document.body!.append(form);
 
@@ -692,12 +899,131 @@ Future<void> sendCheckRecord() async {
   }
 }
 
+@override
+void initState() {
+  super.initState();
+  loadMemoFormConfig();
+}
+
   @override
   void dispose() {
   timer?.cancel();
   pauseTimer?.cancel();
   memoController.dispose();
   super.dispose();
+}
+
+Widget buildStructuredMemoForm() {
+  if (!isMemoFormConfigLoaded) {
+    return const Text(
+      'メモ項目設定を読み込み中です',
+      textAlign: TextAlign.center,
+    );
+  }
+
+  final selectedCategory = getSelectedMemoCategory();
+  final fields = getSelectedMemoFields();
+
+  if (selectedCategory == null || fields.isEmpty) {
+    return const Text(
+      '使用できるメモ項目がありません',
+      textAlign: TextAlign.center,
+    );
+  }
+
+  return Column(
+    children: [
+      const Text(
+        'メモ種別',
+        style: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+
+      const SizedBox(height: 8),
+
+      SegmentedButton<String>(
+        segments: memoFormCategories.map((category) {
+          return ButtonSegment<String>(
+            value: category['id'].toString(),
+            label: Text(category['label'].toString()),
+          );
+        }).toList(),
+        selected: {selectedMemoType},
+        onSelectionChanged: (selected) {
+          setState(() {
+            selectedMemoType = selected.first;
+            memoAnswers.clear();
+            memoFormResetCount++;
+          });
+        },
+      ),
+
+      const SizedBox(height: 16),
+
+      ...fields.map((field) {
+        final fieldId = field['id'].toString();
+        final fieldLabel = field['label'].toString();
+        final fieldType = field['type']?.toString() ?? 'text';
+        final required = field['required'] == true;
+        final rawOptions = field['options'];
+        final options = rawOptions is List
+            ? rawOptions.map((option) => option.toString()).toList()
+            : <String>[];
+
+        if (fieldType == 'select' && options.isNotEmpty) {
+          final currentValue = memoAnswers[fieldId];
+          final dropdownValue =
+              options.contains(currentValue) ? currentValue : null;
+
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: DropdownButtonFormField<String>(
+              key: ValueKey('$selectedMemoType-$fieldId-$memoFormResetCount'),
+              initialValue: dropdownValue,
+              decoration: InputDecoration(
+                labelText: required ? '$fieldLabel *' : fieldLabel,
+                border: const OutlineInputBorder(),
+              ),
+              items: options.map((option) {
+                return DropdownMenuItem<String>(
+                  value: option,
+                  child: Text(option),
+                );
+              }).toList(),
+              onChanged: (value) {
+                if (value != null) {
+                  memoAnswers[fieldId] = value;
+                }
+              },
+            ),
+          );
+        }
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: TextFormField(
+            key: ValueKey('$selectedMemoType-$fieldId-$memoFormResetCount'),
+            initialValue: memoAnswers[fieldId] ?? '',
+            decoration: InputDecoration(
+              labelText: required ? '$fieldLabel *' : fieldLabel,
+              border: const OutlineInputBorder(),
+            ),
+            maxLines: fieldType == 'multiline' ? 3 : 1,
+            onChanged: (value) {
+              memoAnswers[fieldId] = value;
+            },
+          ),
+        );
+      }),
+
+      ElevatedButton(
+        onPressed: isRecording ? addMemoPoint : null,
+        child: const Text('メモを記録する'),
+      ),
+    ],
+  );
 }
 
   @override
@@ -1019,7 +1345,7 @@ if (currentStep == AppStep.finishCheck) ...[
   const SizedBox(height: 8),
 
   ElevatedButton(
-    onPressed: downloadMemoCsv,
+    onPressed: null, //無効化中
     child: const Text('メモ一覧CSVを端末保存'),
   ),
  ],
@@ -1035,73 +1361,71 @@ if (currentStep == AppStep.recording ||
     currentStep == AppStep.saveRecord) ...[       //ここから非表示/表示切替
 
                   Align(
-  alignment: Alignment.centerRight,
-  child: Column(
-    crossAxisAlignment: CrossAxisAlignment.end,
-    children: [
-      Text(
-        operationMode == 'production'
-            ? '本番調査用'
-            : 'PC実験用',
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-          color: operationMode == 'production'
-              ? Colors.grey
-              : Colors.red,
-        ),
-      ),
+                    alignment: Alignment.centerRight,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          operationMode == 'production'
+                              ? '本番調査用'
+                              : 'PC実験用',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: operationMode == 'production'
+                                ? Colors.grey
+                                : Colors.red,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        OutlinedButton.icon(
+                          onPressed: recordStatus == RecordStatus.notStarted
+                              ? () {
+                                  setState(() {
+                                    if (operationMode == 'production') {
+                                      operationMode = 'test';
+                                      statusText = 'PC実験用に切り替えました';
+                                    } else {
+                                      operationMode = 'production';
+                                      statusText = '本番調査用に戻しました';
+                                    }
+                                  });
+                                }
+                              : null,
+                          icon: const Icon(
+                            Icons.science_outlined,
+                            size: 16,
+                          ),
+                          label: Text(
+                            operationMode == 'production'
+                                ? 'PC実験用'
+                                : '本番調査用に戻す',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
 
-      const SizedBox(height: 4),
+                  const SizedBox(height: 8),
 
-      OutlinedButton.icon(
-        onPressed: recordStatus == RecordStatus.notStarted
-            ? () {
-                setState(() {
-                  if (operationMode == 'production') {
-                    operationMode = 'test';
-                    statusText = 'PC実験用に切り替えました';
-                  } else {
-                    operationMode = 'production';
-                    statusText = '本番調査用に戻しました';
-                  }
-                });
-              }
-            : null,
-        icon: const Icon(
-          Icons.science_outlined,
-          size: 16,
-        ),
-        label: Text(
-          operationMode == 'production'
-              ? 'PC実験用'
-              : '本番調査用に戻す',
-          style: const TextStyle(fontSize: 12),
-        ),
-      ),
-    ],
-  ),
-),
+                  Text(
+                    operationMode == 'production'
+                        ? '通常はこのまま使用してください。GPS取得失敗時や精度25m超の点は記録しません。'
+                        : 'PC実験用です。GPS取得に失敗した場合、テスト座標を記録します。',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: operationMode == 'test'
+                          ? FontWeight.bold
+                          : FontWeight.normal,
+                      color: operationMode == 'test'
+                          ? Colors.red
+                          : Colors.black87,
+                    ),
+                  ),
 
-const SizedBox(height: 8),
-
-Text(
-  operationMode == 'production'
-      ? '通常はこのまま使用してください。GPS取得失敗時や精度25m超の点は記録しません。'
-      : 'PC実験用です。GPS取得に失敗した場合、テスト座標を記録します。',
-  textAlign: TextAlign.center,
-  style: TextStyle(
-    fontSize: 13,
-    fontWeight: operationMode == 'test'
-        ? FontWeight.bold
-        : FontWeight.normal,
-    color: operationMode == 'test'
-        ? Colors.red
-        : Colors.black87,
-  ),
-),
-
-const SizedBox(height: 24),
+                  const SizedBox(height: 24),
 
                   if (recordStatus != RecordStatus.paused) ...[
   Row(
@@ -1186,27 +1510,12 @@ if (recordStatus == RecordStatus.paused) ...[
 ],
 
 
-              if (currentStep == AppStep.recording &&
-                  recordStatus == RecordStatus.recording)  ...[
-                  const SizedBox(height: 24),
+  if (currentStep == AppStep.recording &&
+    recordStatus == RecordStatus.recording) ...[
+  const SizedBox(height: 24),
 
-                 TextField(
-                  controller: memoController,
-                  decoration: const InputDecoration(
-                    labelText: 'メモ',
-                    hintText: '例：歩道が狭い、休憩場所、見通しが悪い',
-                    border: OutlineInputBorder(),
-                   ),
-                  maxLines: 2,
-                  ),
-
-               const SizedBox(height: 12),
-
-                  ElevatedButton(
-                    onPressed: isRecording ? addMemoPoint : null,
-                    child: const Text('メモを記録する'),
-                   ),
-               ],
+    buildStructuredMemoForm(),
+  ],
 
                   const SizedBox(height: 24),
 
@@ -1214,7 +1523,7 @@ if (recordStatus == RecordStatus.paused) ...[
                     onPressed: (currentStep == AppStep.saveRecord && !isRecording)
                    ? createGeoJson
                         : null,
-                    child: const Text('保存/送信用ルート・メモ記録作成'),
+                    child: const Text('保存/送信用ルート記録作成'),
                   ),
 
                   if (currentStep == AppStep.saveRecord && geoJsonText.isNotEmpty) ...[
@@ -1231,7 +1540,7 @@ if (recordStatus == RecordStatus.paused) ...[
                     const SizedBox(height: 8),
 
                     const Text(
-                      'ルートとメモを管理用フォルダへ送信します',
+                      'ルートを管理用フォルダへ送信します。メモは記録時に逐次送信されます。',
                       textAlign: TextAlign.center,
                       style: TextStyle(fontSize: 13),
                     ),

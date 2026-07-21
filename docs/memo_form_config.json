@@ -1,0 +1,53 @@
+{
+  "version": "2026-07-21-01",
+  "categories": [
+    {
+      "id": "place",
+      "label": "場所",
+      "fields": [
+        {
+          "id": "place_name",
+          "label": "場所の名前・目印",
+          "type": "text",
+          "required": true
+        },
+        {
+          "id": "place_status",
+          "label": "状況",
+          "type": "multiline",
+          "required": true
+        },
+        {
+          "id": "place_note",
+          "label": "補足",
+          "type": "multiline",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "person",
+      "label": "人",
+      "fields": [
+        {
+          "id": "person_target",
+          "label": "対象者・属性",
+          "type": "text",
+          "required": true
+        },
+        {
+          "id": "person_topic",
+          "label": "話題・様子",
+          "type": "multiline",
+          "required": true
+        },
+        {
+          "id": "person_note",
+          "label": "補足",
+          "type": "multiline",
+          "required": false
+        }
+      ]
+    }
+  ]
+}
